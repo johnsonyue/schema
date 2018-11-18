@@ -1,0 +1,26 @@
+[
+  {
+    "Name": "HK01",
+    "IP_addr": "47.90.99.368",
+    "Provider": "Aliyun",
+    "ASN": 4436,
+    "GeoLocation": {
+      "country": "CN",
+      "city": "Hong Kong",
+      "longitude": "80",
+      "latitude": "30"
+    }
+  },
+  {
+    "Name": "US01",
+    "IP_addr": "39.104.120.69",
+    "Provider": "Vultr",
+    "ASN": 3142,
+    "GeoLocation": {
+      "country": "US",
+      "city": "Chicago",
+      "longitude": "120",
+      "latitude": "25"
+    }
+  }
+]

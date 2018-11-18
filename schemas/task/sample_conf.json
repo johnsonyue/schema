@@ -1,0 +1,18 @@
+{
+  "taskType": "traceroute",
+  "targetFile": {},
+  "targetSamplingMethod": {
+    "detail": {
+      "name": "uniform sampling",
+      "density": 28,
+      "offset": 1
+    }
+  },
+  "tracerouteMethod": {
+    "method": "udp",
+    "attemps": 1
+  },
+  "monitorList": [
+    "HK01"
+  ]
+}

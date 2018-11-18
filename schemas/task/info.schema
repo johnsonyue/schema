@@ -1,0 +1,102 @@
+{
+  "title": "task batch info",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Identifier of a task batch, e.g. 2018-11-11-23-06-42",
+      "type": "string"
+    },
+    "starttime": {
+      "description": "Start time of task batch",
+      "type": "string",
+      "pattern": ""
+    },
+    "endtime": {
+      "description": "End time of task batch",
+      "type": "string",
+      "pattern": ""
+    },
+    "comments": {
+      "description": "Comments on a task batch",
+      "type": "string"
+    },
+    "tasks": {
+      "description": "List of tasks in batch",
+      "type": "array",
+      "minItems": 1,
+      "uniqItems": true,
+      "items": {
+        "$ref": "#/definitions/task"
+      }
+    }
+  },
+  "required": [ "Id", "tasks" ],
+  "definitions": {
+    "task": {
+      "description": "Schema for a single task (on only one monitor)",
+      "title": "task",
+      "type": "object",
+      "properties": {
+        "monitorId": {
+          "description": "Identifier of the monitor undertaking the task",
+          "type": "string",
+          "pattern": "^([A-Z]|[a-z]){2,}[0-9]{2,}$"
+        },
+        "taskId": {
+          "description": "Identifier of the task",
+          "type": "string",
+          "pattern": ""
+        },
+        "starttime": {
+          "description": "Start time of task",
+          "type": "string",
+          "pattern": ""
+        },
+        "endtime": {
+          "description": "End time of task",
+          "type": "string",
+          "pattern": ""
+        },
+        "steps": {
+          "description": "List of steps of task",
+          "type": "array",
+          "items": {
+            "description": "Schema for a single step",
+            "type": "object",
+            "properties": {
+              "name": {
+                "description": "Name of step",
+                "type": "string"
+              },
+              "starttime": {
+                "description": "Start time of task",
+                "type": "string",
+                "pattern": ""
+              },
+              "endtime": {
+                "description": "End time of task",
+                "type": "string",
+                "pattern": ""
+              },
+              "inputs": {
+                "description": "List of inputs",
+                "type": "array",
+                "items": "string"
+              },
+              "outputs": {
+                "description": "List of outputs",
+                "type": "array",
+                "items": "string"
+              },
+              "command": {
+                "description": "command string",
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

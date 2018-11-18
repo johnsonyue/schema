@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "monitor info database",
+  "description": "information of all monitors",
+  "type": "array",
+  "items": {
+    "$ref":  "#/definitions/monitor"
+  },
+  "minItems": 1,
+  "uniqueItems": true,
+  "definitions": {
+    "monitor": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "file:monitor.schema",
+      "title": "Monitor",
+      "description": "Monitor information including: IP address, Provider, AS number, Geolocation info",
+      "type": "object",
+      "properties": {
+        "Name": {
+          "description": "monitor name := geocode + number",
+          "type": "string",
+          "pattern": "^([A-Z]|[a-z]){2,}[0-9]{2,}$"
+        },
+        "IP_addr": {
+          "description": "IPv4 address of monitor",
+          "type": "string",
+          "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
+        },
+        "Provider": {
+          "description": "Provider Name of the monitor",
+          "type": "string"
+        },
+        "ASN": {
+          "description": "AS number of the monitor",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "GeoLocation": {
+          "description": "information of a geolocation",
+          "type": "object",
+          "properties": {
+            "Country": {
+              "description": "country code in ISO 3166-1 alpha-2 format",
+              "type": "string",
+              "pattern": "^([A-Z]|[a-z]){2}$"
+            },
+            "City": {
+              "description": "City Name",
+              "type": "string"
+            },
+            "Longitude": {
+              "description": "Longitude",
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "Latitude": {
+              "description": "Latitude",
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            }
+          }
+        }
+      },
+      "required": [ "Name", "IP_addr" ]
+    }
+  }
+}

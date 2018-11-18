@@ -1,0 +1,40 @@
+{
+  "id": "20181111-23-06-42",
+  "starttime": "2018-11-11-23-06-42",
+  "endtime": "",
+  "comments": "UDP traceroute targets in HK, using 3 monitors",
+  "tasks": [
+    {
+      "monitorId": "HK01",
+      "taskId": "",
+      "starttime": "2018-11-11-23-06-42",
+      "endtime": "",
+      "steps": [
+        {
+          "name": "preprocessing",
+          "starttime": "2018-11-11-23-06-42",
+          "endtime": "",
+          "inputs": [],
+          "outputs": [],
+          "command": ""
+        },
+        {
+          "name": "preparing",
+          "starttime": "2018-11-11-23-06-45",
+          "endtime": "",
+          "inputs": [],
+          "outputs": [],
+          "command": ""
+        },
+        {
+          "name": "postprocessing",
+          "starttime": "2018-11-11-23-06-45",
+          "endtime": "",
+          "inputs": [],
+          "outputs": [],
+          "command": ""
+        }
+      ]
+    }
+  ]
+}
