@@ -1,0 +1,60 @@
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>JSON Editor Example</title>
+    <link href="bootstrap-combined.min.css" rel="stylesheet"></head>
+    <script src='jsoneditor.js'></script>
+    <script src='jquery-3.3.1.min.js'></script>
+    <script>
+      JSONEditor.defaults.options.theme = 'bootstrap2';
+      function load_schema(data){
+        $.ajax({
+          type: "GET",
+          url: "schemas/task/info.schema",
+          //url: "schemas/task/conf.schema",
+        }).done(result => {
+          var element = document.getElementById('div');
+          var conf_opt = {
+            schema: JSON.parse(result),
+            disable_array_delete_all_rows: true,
+            disable_array_delete_last_row: true,
+            disable_array_reorder: true,
+            disable_array_reorder: true,
+            disable_collapse: true,
+            disable_edit_json: true,
+            disable_properties: true,
+            keep_oneof_values: false
+          };
+          var info_opt = {
+            schema: JSON.parse(result),
+            disable_array_add: true,
+            disable_array_delete: true,
+            disable_array_delete_all_rows: true,
+            disable_array_delete_last_row: true,
+            disable_array_reorder: true,
+            disable_array_reorder: true,
+            disable_edit_json: true,
+            disable_properties: true,
+            remove_empty_properties: true,
+            keep_oneof_values: false
+          };
+          //editor = new JSONEditor(element, info_opt);
+          var editor = new JSONEditor(element, info_opt);
+          console.log(JSON.parse(result));
+          console.log(editor.getValue());
+          editor.setValue(data);
+        });
+      }
+
+      //load_schema();
+      $.ajax({
+        type: "GET",
+        url: "schemas/task/sample_info.json"
+      }).done(result => {
+        load_schema(result);
+      });
+    </script>
+</head>
+<body>
+<div id="div"></div>
+</body>

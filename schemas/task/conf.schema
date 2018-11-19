@@ -22,10 +22,23 @@
           "enum": [ "traceroute" ],
           "options": { "hidden": true }
         },
-        "targetFile": {
-          "description": "target file upload",
-          "title": "1. target file",
-          "type": "object"
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input method",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
         },
         "targetSamplingMethod": {
           "description": "multiple methods to select",
@@ -85,13 +98,13 @@
           "required": [ "method" ]
         },
         "monitorList": {
-          "description": "List of monitorId(s)",
+          "description": "List of monitors",
           "title": "4. monitor list",
-          "type": "array",
-          "format": "table",
-          "items": {
-            "title": "monitor",
-            "type": "string"
+          "type": "object",
+          "properties": {
+            "details": {
+              "$ref": "#/definitions/monitorList"
+            }
           }
         }
       },
@@ -109,9 +122,22 @@
           "options": { "hidden": true }
         },
         "targetFile": {
-          "description": "target file upload",
-          "title": "1. target file",
-          "type": "object"
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input section",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
         },
         "pingMethod": {
           "description": "ping method",
@@ -119,7 +145,6 @@
           "type": "object",
           "properties": {
             "method": {
-              "description": "different methods for pings",
               "title": "ping method",
               "type": "array",
               "format": "checkbox",
@@ -133,17 +158,27 @@
           }
         },
         "monitorList": {
-          "description": "List of monitorId(s)",
+          "description": "List of monitors",
           "title": "3. monitor list",
-          "type": "array",
-          "format": "table",
-          "items": {
-            "title": "monitor",
-            "type": "string"
+          "type": "object",
+          "properties": {
+            "details": {
+              "$ref": "#/definitions/monitorList"
+            }
           }
         }
       },
       "required": [ "taskType" ]
+    },
+    "targetFileUpload": {
+      "description": "file upload",
+      "title": "target file",
+      "type": "object"
+    },
+    "targetTextInput": {
+      "description": "multi-line text",
+      "title": "text input",
+      "type": "object"
     },
     "uniformSampling": {
       "title": "uniform sampling",
@@ -156,12 +191,12 @@
           "options": { "hidden": true }
         },
         "density": {
-          "description": "",
+          "description": "sample density in netmask length",
           "type": "number",
           "default": 24
         },
         "offset": {
-          "description": "",
+          "description": "offset of IP sampled in subnet",
           "type": "number",
           "default": 1
         }
@@ -179,12 +214,23 @@
           "options": { "hidden": true }
         },
         "density": {
-          "description": "",
+          "description": "sample density in netmask length",
           "type": "number",
-          "default": 1
+          "default": 24
         }
       },
       "required": [ "name" ]
+    },
+    "monitorList": {
+      "format": "table",
+      "type": "array",
+      "format": "select",
+      "items": {
+        "type": "string",
+        "enum": [ "HK01", "US01", "CN01", "CN02", "US02", "AU01" ]
+      },
+      "uniqueItems": true,
+      "default": [ "HK01", "US01", "CN01", "CN02", "US02", "AU01" ]
     }
   }
 }

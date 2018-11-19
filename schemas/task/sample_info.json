@@ -1,38 +1,76 @@
 {
+  "startTime": "2018-11-11-23-06-42",
+  "endTime": "2018-11-11-23-07-45",
+  "comments": "UDP traceroute targets in HK, using 2 monitors",
   "id": "20181111-23-06-42",
-  "starttime": "2018-11-11-23-06-42",
-  "endtime": "",
-  "comments": "UDP traceroute targets in HK, using 3 monitors",
   "tasks": [
     {
       "monitorId": "HK01",
-      "taskId": "",
-      "starttime": "2018-11-11-23-06-42",
-      "endtime": "",
+      "taskId": "8482b52b-47f8-4614-a09a-20b8587c73b9",
+      "startTime": "2018-11-11-23-06-42",
+      "endTime": "2018-11-11-23-07-45",
       "steps": [
         {
+          "startTime": "2018-11-11-23-06-42",
+          "endTime": "2018-11-11-23-06-43",
           "name": "preprocessing",
-          "starttime": "2018-11-11-23-06-42",
-          "endtime": "",
-          "inputs": [],
-          "outputs": [],
-          "command": ""
+          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.target_list", "20181111-23-06-42/2018-11-11-22-22-46.config" ],
+          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "location": "local",
+          "command": "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
         },
         {
-          "name": "preparing",
-          "starttime": "2018-11-11-23-06-45",
-          "endtime": "",
-          "inputs": [],
-          "outputs": [],
-          "command": ""
+          "startTime": "2018-11-11-23-06-43",
+          "endTime": "2018-11-11-23-07-43",
+          "name": "traceroute",
+          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
+          "location": "remote",
+          "command": "scamper -c 'trace -P udp-paris' -p 100 -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}"
         },
         {
+          "startTime": "2018-11-11-23-06-43",
+          "endTime": "2018-11-11-23-07-45",
           "name": "postprocessing",
-          "starttime": "2018-11-11-23-06-45",
-          "endtime": "",
-          "inputs": [],
-          "outputs": [],
-          "command": ""
+          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.warts" ],
+          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.links" ],
+          "location": "local",
+          "command": "./analyze warts2link ${INPUTS[0]}"
+        }
+      ]
+    },
+    {
+      "monitorId": "HIT01",
+      "taskId": "7a4d1b57-1d9b-4ac7-abeb-4efe5c837e9c",
+      "startTime": "2018-11-11-23-06-42",
+      "endTime": "2018-11-11-23-07-45",
+      "steps": [
+        {
+          "startTime": "2018-11-11-23-06-42",
+          "endTime": "2018-11-11-23-06-43",
+          "name": "preprocessing",
+          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.target_list", "20181111-23-06-42/2018-11-11-22-22-46.config" ],
+          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "location": "local",
+          "command": "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
+        },
+        {
+          "startTime": "2018-11-11-23-06-43",
+          "endTime": "2018-11-11-23-07-43",
+          "name": "traceroute",
+          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
+          "location": "remote",
+          "command": "scamper -c 'trace -P udp-paris' -p 100 -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}"
+        },
+        {
+          "startTime": "2018-11-11-23-06-43",
+          "endTime": "2018-11-11-23-07-45",
+          "name": "postprocessing",
+          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.warts" ],
+          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.links" ],
+          "location": "local",
+          "command": "./analyze warts2link ${INPUTS[0]}"
         }
       ]
     }
