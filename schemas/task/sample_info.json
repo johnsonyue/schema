@@ -3,74 +3,90 @@
   "endTime": "2018-11-11-23-07-45",
   "comments": "UDP traceroute targets in HK, using 2 monitors",
   "id": "20181111-23-06-42",
-  "tasks": [
+  "steps": [
     {
-      "monitorId": "HK01",
-      "taskId": "8482b52b-47f8-4614-a09a-20b8587c73b9",
       "startTime": "2018-11-11-23-06-42",
-      "endTime": "2018-11-11-23-07-45",
-      "steps": [
+      "endTime": "2018-11-11-23-06-43",
+      "name": "IP list generation",
+      "tasks": [
         {
-          "startTime": "2018-11-11-23-06-42",
-          "endTime": "2018-11-11-23-06-43",
-          "name": "preprocessing",
-          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.target_list", "20181111-23-06-42/2018-11-11-22-22-46.config" ],
-          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
-          "location": "local",
+          "inputs": [ "20181111-23-06-42/2018-11-11-22-22-46.target_list", "20181111-23-06-42/2018-11-11-22-22-46.config" ],
+          "outputs": [ "20181111-23-06-42/*/2018-11-11-22-22-46.ip_list" ],
           "command": "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
-        },
-        {
-          "startTime": "2018-11-11-23-06-43",
-          "endTime": "2018-11-11-23-07-43",
-          "name": "traceroute",
-          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
-          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
-          "location": "remote",
-          "command": "scamper -c 'trace -P udp-paris' -p 100 -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}"
-        },
-        {
-          "startTime": "2018-11-11-23-06-43",
-          "endTime": "2018-11-11-23-07-45",
-          "name": "postprocessing",
-          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.warts" ],
-          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.links" ],
-          "location": "local",
-          "command": "./analyze warts2link ${INPUTS[0]}"
         }
       ]
     },
     {
-      "monitorId": "HIT01",
-      "taskId": "7a4d1b57-1d9b-4ac7-abeb-4efe5c837e9c",
       "startTime": "2018-11-11-23-06-42",
       "endTime": "2018-11-11-23-07-45",
-      "steps": [
+      "name": "traceroute",
+      "tasks": [
         {
-          "startTime": "2018-11-11-23-06-42",
-          "endTime": "2018-11-11-23-06-43",
-          "name": "preprocessing",
-          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.target_list", "20181111-23-06-42/2018-11-11-22-22-46.config" ],
-          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
-          "location": "local",
-          "command": "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
-        },
-        {
+          "monitorId": "HK01",
+          "taskId": "8482b52b-47f8-4614-a09a-20b8587c73b9",
           "startTime": "2018-11-11-23-06-43",
           "endTime": "2018-11-11-23-07-43",
-          "name": "traceroute",
-          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
-          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
-          "location": "remote",
+          "inputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
           "command": "scamper -c 'trace -P udp-paris' -p 100 -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}"
         },
         {
-          "startTime": "2018-11-11-23-06-43",
+          "monitorId": "HIT01",
+          "taskId": "7a4d1b57-1d9b-4ac7-abeb-4efe5c837e9c",
+          "startTime": "2018-11-11-23-06-42",
           "endTime": "2018-11-11-23-07-45",
-          "name": "postprocessing",
-          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.warts" ],
-          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.links" ],
-          "location": "local",
-          "command": "./analyze warts2link ${INPUTS[0]}"
+          "inputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.ip_list;20181111-23-06-42/2018-11-11-22-22-46.ip_list" ],
+          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.warts;20181111-23-06-42/2018-11-11-22-22-46.warts" ],
+          "command": "scamper -c 'trace -P udp-paris' -p 100 -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}"
+        }
+      ]
+    },
+    {
+      "startTime": "2018-11-11-23-06-43",
+      "endTime": "2018-11-11-23-07-45",
+      "name": "warts2ifaces",
+      "tasks": [
+        {
+          "inputs": [ "20181111-23-06-42/*/2018-11-11-22-22-46.warts" ],
+          "outputs": [ "20181111-23-06-42/2018-11-11-22-22-46.ifaces" ],
+          "command": "./analyze warts2ifaces ${INPUTS[0]}"
+        }
+      ]
+    },
+    {
+      "startTime": "2018-11-11-23-06-42",
+      "endTime": "2018-11-11-23-07-45",
+      "name": "iffinder",
+      "tasks": [
+        {
+          "monitorId": "HK01",
+          "taskId": "8482b52b-47f8-4614-a09a-20b8587c73b9",
+          "startTime": "2018-11-11-23-06-43",
+          "endTime": "2018-11-11-23-07-43",
+          "inputs": [ "20181111-23-06-42/2018-11-11-22-22-46.iface;20181111-23-06-42/2018-11-11-22-22-46.iface" ],
+          "outputs": [ "20181111-23-06-42/HK01/2018-11-11-22-22-46.iffout;20181111-23-06-42/2018-11-11-22-22-46.iffout" ],
+          "command": "iffinder -c 100 -r 50 -o ${OUTPUTS[0]} ${INPUTS[0]}"
+        },
+        {
+          "monitorId": "HIT01",
+          "taskId": "7a4d1b57-1d9b-4ac7-abeb-4efe5c837e9c",
+          "startTime": "2018-11-11-23-06-42",
+          "endTime": "2018-11-11-23-07-45",
+          "inputs": [ "20181111-23-06-42/2018-11-11-22-22-46.iface;20181111-23-06-42/2018-11-11-22-22-46.iface" ],
+          "outputs": [ "20181111-23-06-42/HIT01/2018-11-11-22-22-46.iffout;20181111-23-06-42/2018-11-11-22-22-46.iffout" ],
+          "command": "iffinder -c 100 -r 50 -o ${OUTPUTS[0]} ${INPUTS[0]}"
+        }
+      ]
+    },
+    {
+      "startTime": "2018-11-11-23-06-43",
+      "endTime": "2018-11-11-23-07-45",
+      "name": "iffout2aliases",
+      "tasks": [
+        {
+          "inputs": [ "20181111-23-06-42/*/2018-11-11-22-22-46.iffout" ],
+          "outputs": [ "20181111-23-06-42/2018-11-11-22-22-46.aliases" ],
+          "command": "ls ${INPUTS[0]} | grep -v '#' >${OUTPUTS[0]}"
         }
       ]
     }

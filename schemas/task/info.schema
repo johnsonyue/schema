@@ -1,7 +1,6 @@
 {
-  "title": "task batch info",
+  "title": "task graph",
   "description": "",
-  "format": "grid",
   "allOf": [
     { 
       "$ref": "#/definitions/event"
@@ -13,8 +12,8 @@
           "description": "Identifier of a task batch, e.g. 2018-11-11-23-06-42",
           "type": "string"
         },
-        "tasks": {
-          "description": "List of tasks in batch",
+        "steps": {
+          "description": "List of steps in task graph",
           "type": "array",
           "options": {
             "collapsed": true
@@ -22,13 +21,13 @@
           "minItems": 1,
           "uniqItems": true,
           "items": {
-            "$ref": "#/definitions/task"
+            "$ref": "#/definitions/step"
           }
         }
       }
     }
   ],
-  "required": [ "id", "tasks" ],
+  "required": [ "id", "steps" ],
   "definitions": {
     "event": {
       "description": "event properties shared by: batch, task and step",
@@ -51,10 +50,41 @@
         }
       }
     },
-    "task": {
-      "description": "Information for a single task (one task for one monitor)",
-      "title": "task",
+    "step": {
+      "description": "Information for a single step",
+      "title": "step",
+      "headerTemplate": "{{i1}}. {{self.name}}",
       "type": "object",
+      "options": {
+        "collapsed": true
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/event"
+        },
+        {
+          "type": "object",
+          "title": "step",
+          "properties": {
+            "name": {
+              "description": "Name of step",
+              "type": "string"
+            },
+            "tasks": {
+              "description": "List of tasks of step",
+              "title": "task list",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/task"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "task": {
+      "title": "task",
+      "headerTemplate": "{{#if self.monitorId}} {{self.monitorId}} {{else}} Manager {{/if}}",
       "format": "grid",
       "options": {
         "collapsed": true
@@ -75,37 +105,6 @@
               "type": "string",
               "pattern": "^([A-Z]|[a-z]){2,}[0-9]{2,}$"
             },
-            "steps": {
-              "description": "List of steps of task",
-              "title": "task steps",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/step"
-              }
-            }
-          }
-        }
-      ],
-      "required": [ "monitorId" ]
-    },
-    "step": {
-      "title": "step",
-      "headerTemplate": "{{i1}}. {{self.name}}",
-      "format": "grid",
-      "options": {
-        "collapsed": true
-      },
-      "allOf": [
-        {
-          "$ref": "#/definitions/event"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "name": {
-              "description": "Name of step",
-              "type": "string"
-            },
             "inputs": {
               "description": "List of inputs",
               "title": "inputs",
@@ -124,10 +123,6 @@
                 "type": "string"
               }
             },
-            "location": {
-              "type": "string",
-              "enum": [ "local", "remote" ]
-            },
             "command": {
               "description": "Command string",
               "title": "command",
@@ -138,8 +133,7 @@
               "title": "echo",
               "type": "string"
             }
-          },
-          "required": [ "location" ]
+          }
         }
       ]
     }

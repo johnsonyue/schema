@@ -10,9 +10,12 @@
   },
   "tracerouteMethod": {
     "method": "udp",
-    "attemps": 1
+    "attemps": 3,
+    "firstHop": 1,
+    "pps": 100
   },
   "monitorList": [
+    "HIT01",
     "HK01"
   ]
 }

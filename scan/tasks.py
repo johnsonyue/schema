@@ -24,20 +24,13 @@ app = Celery(
 )
 
 @app.task
-def run(task_id, pkg_fileurl, root):
-  task_dir = os.path.join( root, task_id );
-  if not os.path.exists(task_dir):
-    os.makedirs(task_dir)
-  pkg_filename = os.path.basename( pkg_fileurl ); pkg_filepath = os.path.join(task_dir, pkg_filename)
+def run(package_url, remote_taskdir, run_filename):
+  if len(package_url.split('://')) > 1:
+    subprocess.Popen( '{cd %s; curl -s -O %s}' % (remote_taskdir, package_url), shell=True, executable='/bin/bash' ).communicate()
+    package_url = os.path.join(remote_taskdir, os.path.basename(package_url))
+  subprocess.Popen( 'tar zxf %s -C %s' % (package_url, remote_taskdir), shell=True ).communicate()
 
-  if len(pkg_fileurl.split('://')) > 1:
-    subprocess.Popen( 'curl -v -o %s %s' % (pkg_filepath, pkg_fileurl), shell=True ).communicate()
-  subprocess.Popen( 'tar zxf %s -C %s' % (pkg_filepath, task_dir), shell=True ).communicate()
-
-  conf = json.load( open("%s/config.json" % (task_dir)) )
-  command = conf['command']
-  sys.stderr.write( command + '\n' )
-  p = subprocess.Popen( command, shell=True )
+  p = subprocess.Popen( 'bash %s' % (os.path.join(remote_taskdir, run_filename)), shell=True )
   p.wait()
   
   return p.returncode

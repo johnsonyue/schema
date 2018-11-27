@@ -22,7 +22,9 @@ def int2ip(i):
   return socket.inet_ntoa(struct.pack('!L',i))
 
 # methods.
-def us(prefix, density, offset):
+def us( argv, prefix):
+  density = argv[0]
+  offset = argv[1]
   f = prefix.split('/')
   m = min( 32, max(8,int(f[1])) ) # mask
   g = 2**(32-max(density,m)) # granuality
@@ -31,13 +33,13 @@ def us(prefix, density, offset):
   for i in range( 0, n, g ):
     print int2ip( a + i + offset )
 
-def urs(prefix, density):
+def urs( argv, prefix ):
   return
 
 # main.
 try:
   if os.path.exists(sys.argv[1]):
-    cfg = json.load(open(sys.argv[1]))['target_sampling']
+    cfg = json.load(open(sys.argv[1]))
   elif not cfg:
     cfg = json.loads(sys.argv[1])
   else:
@@ -46,8 +48,12 @@ except Exception,e:
   sys.stderr.write("something wrong with config: %s\n" % (e) )
   cfg = {}
 
-method = cfg["method"] if cfg.has_key("method") else "Uniform Sampling"
-density = int(cfg["density"]) if cfg.has_key("density") else 24
+method = cfg["targetSamplingMethod"]["detail"]
+name = method['name']
+if name == "uniform sampling":
+  density = method['density']
+  offset = method['offset']
+  proc = us; argv = ( density, offset )
 while True:
   try:
     l = raw_input().strip()
@@ -61,13 +67,9 @@ while True:
   if len(l.split('/')) <= 1:
     print l
     continue
+
   # prefix
-  if method == "Uniform Sampling":
-    offset = int(cfg["offset"]) if cfg.has_key("offset") else 1
-    us(l, density, offset)
-  elif method == "Uniform Random Sampling":
-    urs(l, density)
-  # TODOS: add more methods.
+  proc( argv, l )
 EOF
   ) "$cfg"
 }
@@ -171,7 +173,8 @@ case $cmd in
     target "$CONFIG" | sort -R
     ;;
 
-  "task")
+  "geo")
+    perl geo-labeling.pl ../web/import/GeoLite2-Country-Blocks-IPv4.csv ../web/import/GeoLite2-Country-Locations-en.csv
     ;;
 
   "ssh")

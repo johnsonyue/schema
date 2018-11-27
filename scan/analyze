@@ -1,20 +1,11 @@
 #!/bin/bash
 
-#LOG
-log(){
-echo $1 >&2;
-}
-export -f log
-
 #SUB
 warts2link(){
 test $# -lt 1 && echo 'warts2link $prefix.warts[.tar.gz;.gz]' && exit
 
 input_file_path=$1
 prefix=$(echo $input_file_path | sed 's/\.gz$//' | sed 's/\.tar$//' | sed 's/\.warts$//')
-
-log $prefix #debug
-echo $prefix
 
 (test ! -z "$(echo $input_file_path | grep -E '\.tar\.gz$')" && tar zxf $input_file_path -O \
   || test ! -z "$(echo $input_file_path | grep -E '\.gz$')" && gzip -cd $input_file_path \
@@ -62,6 +53,20 @@ prefix=$(echo $links | sed 's/\.links$//')
 #output_file_path: $prefix.rtrlinks
 }
 
+warts2ifaces(){
+test $# -lt 1 && echo 'warts2ifaces $input $output' && exit
+
+input=$1
+output=$2
+prefix=$(echo $output | sed 's/\.ifaces$//')
+ls $input | while read l; do
+  pfx=$(echo $l | sed 's/\.warts$//')
+  warts2link $l
+  echo $pfx.links
+done | perl linkmerge.pl >$prefix.links
+link2iface $prefix.links
+}
+
 #MAIN
 usage(){
 echo 'analyze <$command> [$args]'
@@ -92,6 +97,13 @@ case $cmd in
     aliases=$2; links=$3;
 
     link_coll $aliases $links
+    ;;
+  "warts2iface")
+    test $# -lt 3 && usage && exit
+
+    input=$2
+    output=$3
+    warts2ifaces $input $output
     ;;
   *)
     usage

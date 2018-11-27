@@ -2,6 +2,12 @@
   "description": "Types of tasks, e.g. traceroute, dealias, pingscan",
   "title": "task type",
   "type": "object",
+  "properties": {
+    "comments": {
+      "title": "comments",
+      "type": "string"
+    }
+  },
   "oneOf": [
     {
       "$ref": "#/definitions/traceroute"
