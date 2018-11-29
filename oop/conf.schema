@@ -1,0 +1,242 @@
+{
+  "description": "Types of tasks, e.g. traceroute, dealias, pingscan",
+  "title": "task type",
+  "type": "object",
+  "properties": {
+    "comments": {
+      "title": "comments",
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/definitions/traceroute"
+    },
+    {
+      "$ref": "#/definitions/pingscan"
+    }
+  ],
+  "definitions": {
+    "traceroute": {
+      "description": "traceroute task",
+      "title": "traceroute",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "traceroute" ],
+          "options": { "hidden": true }
+        },
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input method",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "targetSamplingMethod": {
+          "description": "multiple methods to select",
+          "title": "2. target sampling method",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "selected method",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/uniformSampling"
+                },
+                {
+                  "$ref": "#/definitions/uniformRandomSampling"
+                }
+              ]
+            }
+          }
+        },
+        "tracerouteMethod": {
+          "description": "traceroute method",
+          "title": "3. traceroute method",
+          "type": "object",
+          "properties": {
+            "method": {
+              "description": "traceroute method to use",
+              "title": "traceroute method",
+              "type": "string",
+              "enum": [ "udp", "icmp", "udp-paris", "icmp-paris", "tcp", "tcp-ack" ],
+              "default": "udp-paris"
+            },
+            "attemps": {
+              "description": "maximum number of attemps to obtain a respons per hop",
+              "title": "attemps",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 5,
+              "default": 3
+            },
+            "firstHop": {
+              "description": "specifies the TTL value to begin probing with",
+              "title": "first hop",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 255,
+              "default": 1
+            },
+            "pps": {
+              "description": "specifies the target packets-per-second rate to reach",
+              "title": "packets-per-second",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 300,
+              "default": 50
+            }
+          },
+          "required": [ "method" ]
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "4. monitor list",
+          "type": "object",
+          "properties": {
+            "details": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "pingscan": {
+      "description": "pingscan task",
+      "title": "pingscan",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "pingscan" ],
+          "options": { "hidden": true }
+        },
+        "targetFile": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input section",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "pingMethod": {
+          "description": "ping method",
+          "title": "2. ping method",
+          "type": "object",
+          "properties": {
+            "method": {
+              "title": "ping method",
+              "type": "array",
+              "format": "checkbox",
+              "items": {
+                "type": "string",
+                "enum": [ "tcp-ack", "tcp-syn", "udp", "sctp-init", "ip", "icmp-echo", "icmp-ts", "icmp-addr-mask" ]
+              },
+              "uniqueItems": true,
+              "default": [ "tcp-ack", "tcp-syn", "udp", "sctp-init", "ip", "icmp-echo", "icmp-ts", "icmp-addr-mask" ]
+            }
+          }
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "3. monitor list",
+          "type": "object",
+          "properties": {
+            "details": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "targetFileUpload": {
+      "description": "file upload",
+      "title": "target file",
+      "type": "object"
+    },
+    "targetTextInput": {
+      "description": "multi-line text",
+      "title": "text input",
+      "type": "object"
+    },
+    "uniformSampling": {
+      "title": "uniform sampling",
+      "description": "method 1",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [ "uniform sampling" ],
+          "options": { "hidden": true }
+        },
+        "density": {
+          "description": "sample density in netmask length",
+          "type": "number",
+          "default": 24
+        },
+        "offset": {
+          "description": "offset of IP sampled in subnet",
+          "type": "number",
+          "default": 1
+        }
+      },
+      "required": [ "name" ]
+    },
+    "uniformRandomSampling": {
+      "title": "uniform random sampling",
+      "description": "method 2",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [ "uniform random sampling" ],
+          "options": { "hidden": true }
+        },
+        "density": {
+          "description": "sample density in netmask length",
+          "type": "number",
+          "default": 24
+        }
+      },
+      "required": [ "name" ]
+    },
+    "monitorList": {
+      "format": "table",
+      "type": "array",
+      "format": "select",
+      "items": {
+        "type": "string",
+        "enum": [ "HK01", "US01", "CN01", "CN02", "US02", "AU01" ]
+      },
+      "uniqueItems": true,
+      "default": [ "HK01", "US01", "CN01", "CN02", "US02", "AU01" ]
+    }
+  }
+}

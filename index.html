@@ -7,11 +7,10 @@
     <script src='jquery-3.3.1.min.js'></script>
     <script>
       JSONEditor.defaults.options.theme = 'bootstrap2';
-      function load_schema(data){
+      function load_schema(){
         $.ajax({
           type: "GET",
-          url: "schemas/task/info.schema",
-          //url: "schemas/task/conf.schema",
+          url: "schemas/task/conf.schema",
         }).done(result => {
           var element = document.getElementById('div');
           var conf_opt = {
@@ -38,21 +37,13 @@
             remove_empty_properties: true,
             keep_oneof_values: false
           };
-          //editor = new JSONEditor(element, info_opt);
-          var editor = new JSONEditor(element, info_opt);
+          var editor = new JSONEditor(element, conf_opt);
           console.log(JSON.parse(result));
           console.log(editor.getValue());
-          editor.setValue(data);
         });
       }
 
-      //load_schema();
-      $.ajax({
-        type: "GET",
-        url: "schemas/task/sample_info.json"
-      }).done(result => {
-        load_schema(result);
-      });
+      load_schema();
     </script>
 </head>
 <body>

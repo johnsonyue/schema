@@ -1,0 +1,22 @@
+{
+  "taskType": "traceroute",
+  "targetInput": {
+    "targetFilepath": "/home/john/testwd/input.targets"
+  },
+  "targetSamplingMethod": {
+    "detail": {
+      "name": "uniform sampling",
+      "density": 28,
+      "offset": 1
+    }
+  },
+  "tracerouteMethod": {
+    "method": "udp",
+    "attemps": 3,
+    "firstHop": 1,
+    "pps": 100
+  },
+  "monitorList": [
+    "HIT01"
+  ]
+}
