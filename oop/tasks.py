@@ -26,7 +26,9 @@ app = Celery(
 @app.task
 def run(package_fileurl, remote_task_root, run_filename):
   if len(package_fileurl.split('://')) > 1:
-    subprocess.Popen( '{cd %s; curl -s -O %s}' % (remote_task_root, package_fileurl), shell=True, executable='/bin/bash' ).communicate()
+    os.chdir(remote_task_root)
+    package_filename = os.path.basename( package_fileurl.split('?')[0] )
+    subprocess.Popen( "curl -s -o %s %s" % (package_filename, package_fileurl), shell=True, executable='/bin/bash' ).communicate()
     package_fileurl = os.path.join(remote_task_root, os.path.basename(package_fileurl))
   subprocess.Popen( 'tar zxf %s -C %s' % (package_fileurl, remote_task_root), shell=True ).communicate()
 

@@ -14,6 +14,7 @@ import pika
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
+import cgi
 import random
 import urlparse
 
@@ -211,9 +212,9 @@ class TaskRunner():
 
   # get full path from relative local[;remote] path
   # relative to $<task_root>, $<remote_task_root>
-  def __real_path__(self, path, monitor_id=''):
+  def __real_paths__(self, path, monitor_id=''):
     ## case 1. absolute path return as is
-    if path[0] == '/':
+    if path and path[0] == '/':
       return path,
 
     ## case 2. relative path
@@ -254,14 +255,14 @@ class TaskRunner():
   #    $step_name, $monitor_id: for whom and which step
   def _make_package_(self, monitor_id, inputs, outputs, command, step_name):
     ## get real path
-    local_inputs = map( lambda x: self.__real_path__(x, monitor_id)[0], inputs )
-    remote_inputs = map( lambda x: self.__real_path__(x, monitor_id)[1], inputs )
+    local_inputs = map( lambda x: self.__real_paths__(x, monitor_id)[0], inputs )
+    remote_inputs = map( lambda x: self.__real_paths__(x, monitor_id)[1], inputs )
 
-    remote_outputs = map( lambda x: self.__real_path__(x, monitor_id)[1], outputs )
+    remote_outputs = map( lambda x: self.__real_paths__(x, monitor_id)[1], outputs )
     command = self.__eval_command__(remote_inputs, remote_outputs, command)
 
     ## froms, <$self.task_id>/<$local_input.basename>
-    frs = map( lambda x: self.__real_path__(';'+os.path.basename(x), monitor_id)[1], local_inputs )
+    frs = map( lambda x: self.__real_paths__(';'+os.path.basename(x), monitor_id)[1], local_inputs )
     ## make run script
     run = "#!/bin/bash\n"
     for i in range(len(local_inputs)):
@@ -271,12 +272,12 @@ class TaskRunner():
         run += "mv %s %s\n" % (fr, to)
     run += command+'\n'
     run_filename = '%s.sh' % (step_name)
-    run_filepath = self.__real_path__( os.path.join(monitor_id, run_filename), monitor_id )[0]
+    run_filepath = self.__real_paths__( os.path.join(monitor_id, run_filename), monitor_id )[0]
     open(run_filepath, 'w').write(run)
     
     ## tar input files into one dir
     package_filename = "%s.%s.tar.gz" % (monitor_id, step_name)
-    package_filepath = self.__real_path__(package_filename)[0]
+    package_filepath = self.__real_paths__(package_filename)[0]
     tar = "tar --transform 's,.*/,,g' -zcf %s -P %s" % (
       package_filepath,
       ' '.join(local_inputs + [run_filepath])
@@ -291,8 +292,8 @@ class TaskRunner():
     outputs = monitor_task['outputs']
 
     ## get real path
-    local_outputs = map( lambda x: self.__real_path__(x, monitor_id)[0], outputs)
-    remote_outputs = map( lambda x: self.__real_path__(x, monitor_id)[1], outputs)
+    local_outputs = map( lambda x: self.__real_paths__(x, monitor_id)[0], outputs)
+    remote_outputs = map( lambda x: self.__real_paths__(x, monitor_id)[1], outputs)
 
     ## manager pull results.
     for i in range(len(remote_outputs)):
@@ -312,15 +313,16 @@ class TaskRunner():
       monitor_id = task['monitorId']
       # where to get package, which script to run
       package_filepath, run_filename = self.monitor_task[monitor_id]['packageInfo']
+      package_filename = os.path.basename( package_filepath )
 
       if not self.is_manager_push:
-        package_fileurl = 'http://%s:%s/%s?monitorId=%s' % (self.manager_ip, self.free_port, package_filepath, monitor_id)
+        package_fileurl = 'http://%s:%s/%s?monitorId=%s' % (self.manager_ip, self.free_port, package_filename, monitor_id)
       else:
         package_filename = os.path.basename( package_filepath )
-        package_fileurl = self.__real_path__(';'+package_filename, monitor_id)[1]
+        package_fileurl = self.__real_paths__(';'+package_filename, monitor_id)[1]
 
       # where to unpack
-      remote_task_root = self.__real_path__(';', monitor_id)[1]
+      remote_task_root = self.__real_paths__(';', monitor_id)[1]
 
       t = threading.Thread( target=self.task_thread_func, args=(monitor_id, package_fileurl, remote_task_root, run_filename) )
       thread_list.append(t)
@@ -333,8 +335,8 @@ class TaskRunner():
     # case 1. local task
     if not tasks[0].has_key('monitorId'):
       for task in tasks:
-        inputs = map( lambda x: self.__real_path__(x)[0], task['inputs'] )
-        outputs = map( lambda x: self.__real_path__(x)[0], task['outputs'] )
+        inputs = map( lambda x: self.__real_paths__(x)[0], task['inputs'] )
+        outputs = map( lambda x: self.__real_paths__(x)[0], task['outputs'] )
         command = self.__eval_command__( inputs, outputs, task['command'] )
         print command
         subprocess.Popen(command, shell=True).communicate()
@@ -358,7 +360,7 @@ class TaskRunner():
       self.monitor_root[monitor_id] = self.monitor_db[monitor_id]['WorkDirectory']
 
       ## make monitor sub-directory
-      monitor_dir = self.__real_path__(monitor_id)[0]
+      monitor_dir = self.__real_paths__(monitor_id)[0]
       if not os.path.exists(monitor_dir):
         os.makedirs( monitor_dir )
       
@@ -372,7 +374,7 @@ class TaskRunner():
       for task in monitor_tasks:
         monitor_id = task['monitorId']
         package_filepath = self.monitor_task[monitor_id]['packageInfo'][0]
-        remote_task_root = self.__real_path__(';', monitor_id)[1]
+        remote_task_root = self.__real_paths__(';', monitor_id)[1]
 
         mkdirs = "./run.sh ssh -n %s mkdirs -r %s 1>&2" % ( monitor_id, remote_task_root )
         print mkdirs
@@ -385,16 +387,18 @@ class TaskRunner():
       return
 
     ## case 2. worker pull
-    free_port = self.find_free_port()
+    self.free_port = self.__find_free_port__()
     monitor_list = map( lambda x: x['monitorId'], monitor_tasks )
-    task_root = self.__real_path__('')
+    task_root = self.__real_paths__('')[0]
     # parent process serves packages
-    if not os.fork():
-      server = ThreadedHTTPServer((self.manager_ip, free_port), Handler, task_root, monitor_list)
+    pid = os.fork()
+    if not pid:
+      server = ThreadedHTTPServer((self.manager_ip, self.free_port), Handler, task_root, monitor_list)
       server.serve_forever()
     # child process send remote tasks
     else:
       self.run_tasks(monitor_tasks)
+      os.waitpid(pid)
 
   def run(self):
     ## make task root directory
