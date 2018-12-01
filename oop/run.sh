@@ -234,6 +234,7 @@ EOF
         expect -c " \
           set timeout -1
           spawn scp -P $port $from $to
+          log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
         "

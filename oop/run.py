@@ -22,7 +22,7 @@ def usage():
   sys.stderr.write("python do.py <$conf_filename>\n")
 
 def current_time():
-  datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+  return datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
 def get_celery_object():
   ## prepare task queue for remote tasks
@@ -77,7 +77,7 @@ class TaskConfigParser():
     self.conf_filename = os.path.basename(conf_filepath)
     self.conf = json.load( open(conf_filepath) )
     self.schema = json.load( open(schema_filepath) )
-    self.task_id = conf_filepath.rsplit('.', 1)[0]
+    self.task_id = os.path.basename(conf_filepath).rsplit('.', 1)[0]
   
   def __get_class_from_schema__(self):
     # schema namespace
@@ -193,9 +193,12 @@ class TaskConfigParser():
 
 class TaskRunner():
   def __init__(self, task_info, monitor_info):
+    # keep a copy of task_info for logging
+    self.task_info = task_info
+
     # task info
-    self.task_id = task_info['id']
-    self.steps = task_info["steps"]
+    self.task_id = self.task_info['id']
+    self.steps = self.task_info["steps"]
 
     # monitor info
     self.monitor_db = { e['Name']: e for e in monitor_info }
@@ -203,7 +206,7 @@ class TaskRunner():
     self.manager_root = manager_info['WorkDirectory']
     self.manager_ip = manager_info['IP_addr']
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
-    self.is_manager_push = True
+    self.is_manager_push = False
 
     # celery
     self.celery = get_celery_object()
@@ -302,14 +305,20 @@ class TaskRunner():
       h.wait()
     return
 
-  def task_thread_func(self, monitor_id, package_fileurl, remote_task_root, run_filename):
+  def task_thread_func(self, task, monitor_id, package_fileurl, remote_task_root, run_filename):
     r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id) )
     self.taskid_to_monitor[r.task_id] = monitor_id;
     r.get( callback=self.on_run_message, propagate=False )
 
+    task['endTime'] = current_time()
+    print json.dumps(self.task_info)
+
   def run_tasks(self, tasks):
     thread_list = []
     for task in tasks:
+      task['startTime'] = current_time()
+      print json.dumps(self.task_info)
+
       monitor_id = task['monitorId']
       # where to get package, which script to run
       package_filepath, run_filename = self.monitor_task[monitor_id]['packageInfo']
@@ -324,13 +333,16 @@ class TaskRunner():
       # where to unpack
       remote_task_root = self.__real_paths__(';', monitor_id)[1]
 
-      t = threading.Thread( target=self.task_thread_func, args=(monitor_id, package_fileurl, remote_task_root, run_filename) )
+      t = threading.Thread( target=self.task_thread_func, args=(task, monitor_id, package_fileurl, remote_task_root, run_filename) )
       thread_list.append(t)
       t.start()
     
     [ t.join() for t in thread_list ]
 
   def run_step(self, step):
+    step['startTime'] = current_time()
+    print json.dumps(self.task_info)
+
     tasks = step['tasks']
     # case 1. local task
     if not tasks[0].has_key('monitorId'):
@@ -338,8 +350,10 @@ class TaskRunner():
         inputs = map( lambda x: self.__real_paths__(x)[0], task['inputs'] )
         outputs = map( lambda x: self.__real_paths__(x)[0], task['outputs'] )
         command = self.__eval_command__( inputs, outputs, task['command'] )
-        print command
         subprocess.Popen(command, shell=True).communicate()
+
+        step['endTime'] = current_time()
+        print json.dumps(self.task_info)
         return
 
     # case 2. remote tasks
@@ -377,13 +391,15 @@ class TaskRunner():
         remote_task_root = self.__real_paths__(';', monitor_id)[1]
 
         mkdirs = "./run.sh ssh -n %s mkdirs -r %s 1>&2" % ( monitor_id, remote_task_root )
-        print mkdirs
         subprocess.Popen(mkdirs, shell=True).communicate()
 
         put = "./run.sh ssh -n %s put -l %s -r %s 1>&2" % ( monitor_id, package_filepath, remote_task_root )
         subprocess.Popen(put, shell=True).communicate()
       ## run tasks
       self.run_tasks(monitor_tasks)
+
+      step['endTime'] = current_time()
+      print json.dumps(self.task_info)
       return
 
     ## case 2. worker pull
@@ -400,15 +416,24 @@ class TaskRunner():
       self.run_tasks(monitor_tasks)
       os.waitpid(pid)
 
+      step['endTime'] = current_time()
+      print json.dumps(self.task_info)
+
   def run(self):
     ## make task root directory
     task_root = os.path.join( self.manager_root, self.task_id )
     if not os.path.exists(task_root):
       os.makedirs( task_root )
 
+    self.task_info['startTime'] = current_time()
+    print json.dumps(self.task_info)
+
     ## run task steps
     for step in self.steps:
       self.run_step(step)
+
+    self.task_info['endTime'] = current_time()
+    print json.dumps(self.task_info)
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
