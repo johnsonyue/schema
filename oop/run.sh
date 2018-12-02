@@ -37,16 +37,7 @@ def urs( argv, prefix ):
   return
 
 # main.
-try:
-  if os.path.exists(sys.argv[1]):
-    cfg = json.load(open(sys.argv[1]))
-  elif not cfg:
-    cfg = json.loads(sys.argv[1])
-  else:
-    cfg = {}
-except Exception,e:
-  sys.stderr.write("something wrong with config: %s\n" % (e) )
-  cfg = {}
+cfg = json.load(open(sys.argv[1]))['user_config']
 
 method = cfg["targetSamplingMethod"]["detail"]
 name = method['name']
@@ -244,6 +235,7 @@ EOF
         expect -c " \
           set timeout -1
           spawn bash -c \"ssh $ssh -p $port 'mkdir -p $REMOTE'\"
+          log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
         "

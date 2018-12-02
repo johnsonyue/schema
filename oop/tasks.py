@@ -29,7 +29,7 @@ def run(package_fileurl, remote_task_root, run_filename):
     os.chdir(remote_task_root)
     package_filename = os.path.basename( package_fileurl.split('?')[0] )
     subprocess.Popen( "curl -s -o %s %s" % (package_filename, package_fileurl), shell=True, executable='/bin/bash' ).communicate()
-    package_fileurl = os.path.join(remote_task_root, os.path.basename(package_fileurl))
+    package_fileurl = os.path.join(remote_task_root, package_filename)
   subprocess.Popen( 'tar zxf %s -C %s' % (package_fileurl, remote_task_root), shell=True ).communicate()
 
   p = subprocess.Popen( 'bash %s' % (os.path.join(remote_task_root, run_filename)), shell=True )

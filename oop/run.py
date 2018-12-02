@@ -74,8 +74,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 class TaskConfigParser():
   def __init__(self, conf_filepath, schema_filepath):
+    self.conf_filepath = conf_filepath
     self.conf_filename = os.path.basename(conf_filepath)
-    self.conf = json.load( open(conf_filepath) )
+    self.conf = json.load( open(conf_filepath) )['user_config']
     self.schema = json.load( open(schema_filepath) )
     self.task_id = os.path.basename(conf_filepath).rsplit('.', 1)[0]
   
@@ -110,15 +111,17 @@ class TaskConfigParser():
 
     # traceroute dependencies
     traceroute_method = self.conf["tracerouteMethod"]
-    monitor_list = self.conf["monitorList"]
+    monitor_list = self.conf["monitorList"]["detail"]
 
     # traceroute step 1
     s1 = Step(name="target sampling", tasks=[])
     
-    target_filepath = self.conf['targetInput']['targetFilepath']
-
+    target_filepath = self.conf['targetInput']['detail']
+    if len(target_filepath.split('://')) > 1:
+      target_filepath += '#%s' % (os.path.basename(target_filepath))
+    
     t = Task()
-    t.inputs = [ target_filepath, os.path.realpath(self.conf_filename) ]
+    t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
     t.outputs = [ self.task_id+".ip_list" ]
     t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
     s1.tasks.append(t)
@@ -344,6 +347,19 @@ class TaskRunner():
     print json.dumps(self.task_info)
 
     tasks = step['tasks']
+
+    # download inputs that are urls
+    for task in tasks:
+      for i in range(len(task['inputs'])):
+        input = task['inputs'][i].split(';')[0]
+        f = input.split('#')
+        if len(f) > 1:
+          url = f[0]; input = f[1]
+          realpath = self.__real_paths__(input)[0]
+          if not os.path.exists(realpath):
+            subprocess.Popen( "curl -s -o %s %s" % (realpath, url), shell=True).communicate()
+          task['inputs'][i] = input
+
     # case 1. local task
     if not tasks[0].has_key('monitorId'):
       for task in tasks:
@@ -408,13 +424,13 @@ class TaskRunner():
     task_root = self.__real_paths__('')[0]
     # parent process serves packages
     pid = os.fork()
-    if not pid:
+    if pid:
       server = ThreadedHTTPServer((self.manager_ip, self.free_port), Handler, task_root, monitor_list)
       server.serve_forever()
+      os.waitpid(pid, 0) # important! wait for step to finish
     # child process send remote tasks
     else:
       self.run_tasks(monitor_tasks)
-      os.waitpid(pid)
 
       step['endTime'] = current_time()
       print json.dumps(self.task_info)

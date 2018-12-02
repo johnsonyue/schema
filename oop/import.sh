@@ -89,6 +89,7 @@ expect -c " \
     | sed 's/edge_table/${_task}_edge_table/g' \
     | sed 's|nodes.dsv|$prefix/${task}-nodes.dsv|g' \
     | sed 's|links.dsv|$prefix/${task}-links.dsv|g')\"
+  log_user 0
   expect -re \".*password.*\" {send \"$pass\r\n\"}
   expect eof \
 "
