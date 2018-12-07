@@ -186,15 +186,48 @@ case $cmd in
       ./run.sh ssh -n $node_name cat -r $dir/secrets.json && echo
     # inline scripts.
     ( test "$operation" == "setup" || \
+      test "$operation" == "setup-manager" || \
       test "$operation" == "activate" ) && \
     case $operation in
-      "setup")
+      "setup-manager")
         cat << "EOF" | sed "s/<\$pass>/$pass/"
 debconf-set-selections <<< 'mysql-server mysql-server/root_password password <$pass>'
 debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password <$pass>'
 apt-get install -y mysql-server
 apt-get install -y python-pip rabbitmq-server redis-server
 pip install -U celery "celery[redis]"
+pip install pika sqlalchemy
+EOF
+        ;;
+      "setup")
+        cat << "EOF" | sed "s|<\$dir>|$dir|"
+# scamper
+cd <$dir>
+wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz
+
+tar zxf scamper-cvs-20180504.tar.gz
+cd scamper-cvs-20180504/
+sed -i 's/snprintf(header, sizeof(header), "traceroute from %s to %s", src, dst);/snprintf(header, sizeof(header), "traceroute from %s to %s %ld", src, dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
+sed -i 's/snprintf(header, sizeof(header), "traceroute to %s", dst);/snprintf(header, sizeof(header), "traceroute to %s %ld", dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
+
+./configure
+make && make install
+cd ../
+
+# iffinder
+cd <$dir>
+wget https://www.caida.org/tools/measurement/iffinder/download/iffinder-1.38.tar.gz
+
+tar zxf iffinder-1.38.tar.gz
+cd iffinder-1.38/
+./configure && make
+ln -s $(realpath miniffinder) /usr/bin/iffinder
+cd ../
+
+# celery, sql
+apt-get install -y python-pip rabbitmq-server redis-server
+pip install -U celery "celery[redis]"
+pip install pika sqlalchemy
 EOF
         ;;
       "activate")

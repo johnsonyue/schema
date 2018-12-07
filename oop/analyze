@@ -59,7 +59,7 @@ test $# -lt 1 && echo 'warts2ifaces $input $output' && exit
 input=$1
 output=$2
 prefix=$(echo $output | sed 's/\.ifaces$//')
-ls $input | while read l; do
+for l in ${input[*]}; do
   pfx=$(echo $l | sed 's/\.warts$//')
   warts2link $l
   echo $pfx.links
@@ -103,7 +103,7 @@ case $cmd in
 
     input=$2
     output=$3
-    warts2ifaces $input $output
+    warts2ifaces "$input" $output
     ;;
   *)
     usage

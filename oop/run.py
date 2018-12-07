@@ -150,7 +150,7 @@ class TaskConfigParser():
     t = Task()
     t.inputs = [ os.path.join("*", self.task_id+'.warts') ]
     t.outputs = [ self.task_id+'.ifaces', self.task_id+'.links' ]
-    t.command = "./analyze warts2iface ${INPUTS[0]} ${OUTPUTS[0]}"
+    t.command = './analyze warts2iface \\\"${INPUTS[0]}\\\" ${OUTPUTS[0]}'
     s3.tasks.append(t)
     
     task_graph.steps.append(s3)
@@ -209,7 +209,7 @@ class TaskRunner():
     self.manager_root = manager_info['WorkDirectory']
     self.manager_ip = manager_info['IP_addr']
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
-    self.is_manager_push = False
+    self.is_manager_push = True
 
     # celery
     self.celery = get_celery_object()

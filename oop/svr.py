@@ -26,6 +26,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
       if not line:
         break
       self.server.task_stdout[task_id] = line
+    json.dump( json.loads(self.server.task_stdout[task_id]), open(os.path.join(config_root,task_id+'.log'), 'w') )
   def reply(self, status, msg, data=''):
     ret = {}
     ret["status"] = status
@@ -72,6 +73,13 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
 
     elif action == "query_state":
       task_id = obj['task_id']
+      
+      # logged
+      log_filepath = os.path.join( config_root, task_id+".log" )
+      if os.path.exists(log_filepath):
+        self.reply( 0, err[0], json.load(open(log_filepath)) )
+        return
+
       if not self.server.task_stdout.has_key(task_id):
         self.reply(2, err[2])
         return
