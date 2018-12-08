@@ -150,7 +150,7 @@ class TaskConfigParser():
     t = Task()
     t.inputs = [ os.path.join("*", self.task_id+'.warts') ]
     t.outputs = [ self.task_id+'.ifaces', self.task_id+'.links' ]
-    t.command = './analyze warts2iface \\\"${INPUTS[0]}\\\" ${OUTPUTS[0]}'
+    t.command = './analyze warts2iface "${INPUTS[0]}" ${OUTPUTS[0]}'
     s3.tasks.append(t)
     
     task_graph.steps.append(s3)
@@ -172,22 +172,11 @@ class TaskConfigParser():
     t = Task()
     t.inputs = [ os.path.join("*", self.task_id+'.iffout') ]
     t.outputs = [ self.task_id+'.aliases' ]
-    t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if(\$NF == \\\"D\\\") print \$1\\\" \\\"\$2}' | sort -u >${OUTPUTS[0]}"
+    t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if(\$NF == \"D\") print \$1\" \"\$2}' | sort -u >${OUTPUTS[0]}"
     s5.tasks.append(t)
     
     task_graph.steps.append(s5)
 
-    # traceroute step 6
-    s6 = Step(name="import", tasks=[])
-
-    t = Task()
-    t.inputs = [ os.path.join("*", self.task_id+'.links'), self.task_id+'.ifaces' ]
-    t.outputs = [ self.task_id+'.links.geo' ]
-    t.command = "cat ${INPUTS[0]} | ./run.sh geo >${OUTPUTS[0]}; ./import.sh ${OUTPUTS[0]} ${INPUTS[1]} %s" % (self.task_id)
-    s6.tasks.append(t)
-    
-    task_graph.steps.append(s6)
-    
     # return task_graph object
     return json.loads(task_graph.serialize())
 
@@ -239,12 +228,13 @@ class TaskRunner():
     return local_path, remote_path
   
   def __eval_command__(self, inputs, outputs, command):
-    # add prefix
-    inputs_str = ' '.join(map( lambda x: '"'+x+'"', inputs ))
-    outputs_str = ' '.join(map( lambda x: '"'+x+'"', outputs ))
-    p = subprocess.Popen('INPUTS=(%s); OUTPUTS=(%s); echo "%s"' % (inputs_str, outputs_str, command), executable='/bin/bash', shell=True, stdout=subprocess.PIPE)
+    for i in range(len(inputs)):
+      command = command.replace('${INPUTS[%d]}' % i, inputs[i])
+    for i in range(len(outputs)):
+      command = command.replace('${OUTPUTS[%d]}' % i, outputs[i])
     
-    return p.stdout.read()
+    return command
+    
   def __find_free_port__(self):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
       s.bind(('', 0))
