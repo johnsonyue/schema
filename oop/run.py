@@ -36,7 +36,8 @@ def get_celery_object():
 
   celery = Celery()
   celery.conf.update(
-    broker_url = "amqp://%s:%s@%s:%s" % (broker_username, broker_password, broker_ip, broker_port),
+    result_db_short_lived_sessions = True,
+    broker_url = "redis://%s:%s@%s:%s" % (broker_username, broker_password, broker_ip, broker_port),
     result_backend = "db+mysql://%s:%s@%s/%s" % (backend_username, backend_password, backend_ip, backend_database)
   )
 
@@ -172,16 +173,66 @@ class TaskConfigParser():
     t = Task()
     t.inputs = [ os.path.join("*", self.task_id+'.iffout') ]
     t.outputs = [ self.task_id+'.aliases' ]
-    t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if(\$NF == \"D\") print \$1\" \"\$2}' | sort -u >${OUTPUTS[0]}"
+    t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if($NF == \"D\") print $1\" \"$2}' | sort -u >${OUTPUTS[0]}"
     s5.tasks.append(t)
     
     task_graph.steps.append(s5)
+
+    # traceroute step 6
+
+    s6 = Step(name="import", tasks=[])
+
+    t = Task()
+    t.inputs = [ self.task_id+'.links' ]
+    t.outputs = [ ]
+    t.command = "python import.py %s ${INPUTS[0]}" % (self.task_id)
+    s6.tasks.append(t)
+    
+    task_graph.steps.append(s6)
 
     # return task_graph object
     return json.loads(task_graph.serialize())
 
   def _generate_pingscan_info_(self):
-    return
+    # classes
+    TaskGraph, Step, Task = self.__get_class_from_schema__()
+    # taskGraph object
+    task_graph = TaskGraph(id=self.task_id, steps=[])
+
+    # pingscan dependencies
+    ping_method = self.conf["pingMethod"]
+    monitor_list = self.conf["monitorList"]["detail"]
+
+    # pingscan step 1
+    s1 = Step(name="ping", tasks=[])
+    
+    target_filepath = self.conf['targetInput']['detail']
+    if len(target_filepath.split('://')) > 1:
+      target_filepath += '#%s' % (os.path.basename(target_filepath))
+    
+    for monitor in monitor_list:
+      method = ping_method["method"]
+      opt = {
+        "tcp-ack": "-PA",
+        "tcp-syn": "-PS443",
+        "udp": "-PU",
+        "sctp-init": "-PY",
+        "ip": "-PO2,4",
+        "icmp-echo": "-PE",
+        "icmp-ts": "-PP",
+        "icmp-addr-mask": "-PM"
+      }
+      opt_str = ' '.join( map( lambda m: opt[m], method ) )
+
+      t = Task(monitorId=monitor)
+      t.inputs = [ "%s;%s" % ( target_filepath, self.task_id+'.ip_list' ) ]
+      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.xml'), self.task_id+'.xml' ) ]
+      t.command = "nmap -sn %s -n -iL ${INPUTS[0]} -oX ${OUTPUTS[0]}" % (opt_str)
+      s1.tasks.append(t)
+    
+    task_graph.steps.append(s1)
+
+    return json.loads(task_graph.serialize())
 
 class TaskRunner():
   def __init__(self, task_info, monitor_info):
@@ -299,7 +350,8 @@ class TaskRunner():
     return
 
   def task_thread_func(self, task, monitor_id, package_fileurl, remote_task_root, run_filename):
-    r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id) )
+    r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id), retry=False, acks_late=False )
+    task['taskId'] = r.task_id
     self.taskid_to_monitor[r.task_id] = monitor_id;
     r.get( callback=self.on_run_message, propagate=False )
 
@@ -341,14 +393,14 @@ class TaskRunner():
     # download inputs that are urls
     for task in tasks:
       for i in range(len(task['inputs'])):
-        input = task['inputs'][i].split(';')[0]
-        f = input.split('#')
+        inputs = task['inputs'][i].split(';')
+        f = inputs[0].split('#')
         if len(f) > 1:
-          url = f[0]; input = f[1]
-          realpath = self.__real_paths__(input)[0]
+          url = f[0]; inputs[0] = f[1]
+          realpath = self.__real_paths__(inputs[0])[0]
           if not os.path.exists(realpath):
             subprocess.Popen( "curl -s -o %s %s" % (realpath, url), shell=True).communicate()
-          task['inputs'][i] = input
+          task['inputs'][i] = ';'.join( inputs )
 
     # case 1. local task
     if not tasks[0].has_key('monitorId'):

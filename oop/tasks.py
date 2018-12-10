@@ -19,8 +19,10 @@ backend_password = backend['password']; database = backend['database']
 
 app = Celery(
   'tasks',
+  broker_connection_max_retries = 0,
+  result_db_short_lived_sessions = True,
   backend = "db+mysql://%s:%s@%s/%s" % (backend_username, backend_password, backend_ip, database),
-  broker = "amqp://%s:%s@%s:%s" % (username, password, broker_ip, port)
+  broker = "redis://%s:%s@%s:%s" % (username, password, broker_ip, port)
 )
 
 @app.task

@@ -105,7 +105,8 @@ usage(){
   echo "  ssh -n <\$node_name> <\$operation>"
   echo "    OPERATIONS:"
   echo "      setup"
-  echo "      activate"
+  echo "      start"
+  echo "      stop"
   echo "      cat -r <\$remote>"
   echo "      mkdirs -r <\$remote_dir>"
   echo "      get/put -l <\$local> -r <\$remote>"
@@ -177,6 +178,7 @@ case $cmd in
 
     # credentials.
     IFS="|" read ssh port pass dir< <(creds $node_name)
+    pass=$(printf "%q" $pass)
 
     # upload files.
     test "$operation" == "setup" && \
@@ -187,7 +189,8 @@ case $cmd in
     # inline scripts.
     ( test "$operation" == "setup" || \
       test "$operation" == "setup-manager" || \
-      test "$operation" == "activate" ) && \
+      test "$operation" == "stop" || \
+      test "$operation" == "start" ) && \
     case $operation in
       "setup-manager")
         cat << "EOF" | sed "s/<\$pass>/$pass/"
@@ -201,6 +204,7 @@ EOF
         ;;
       "setup")
         cat << "EOF" | sed "s|<\$dir>|$dir|"
+apt-get install -y build-essential nmap tmux
 # scamper
 cd <$dir>
 wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz
@@ -225,14 +229,22 @@ ln -s $(realpath miniffinder) /usr/bin/iffinder
 cd ../
 
 # celery, sql
-apt-get install -y python-pip rabbitmq-server redis-server
+apt-get install -y python-pip rabbitmq-server redis-server python-dev libmysqlclient-dev
+pip install setuptools
+pip install redis
 pip install -U celery "celery[redis]"
-pip install pika sqlalchemy
+pip install mysqlclient pika sqlalchemy
 EOF
         ;;
-      "activate")
+      "start")
+        cat << "EOF" | sed "s|<\$dir>|$dir|" | sed "s/<\$node_name>/$node_name/"
+tmux new -s 'task' -d \; \
+  send-keys "cd <$dir>; celery worker -A tasks -l info -c 2 -Q vp.<$node_name>.run --without-gossip --without-mingle --pool=solo --purge" C-m;
+EOF
+        ;;
+      "stop")
         cat << "EOF"
-celery worker -A my_app -l info
+tmux kill-window -t task
 EOF
         ;;
     esac \
@@ -267,7 +279,7 @@ EOF
         test -z "$REMOTE" && usage
         expect -c " \
           set timeout -1
-          spawn bash -c \"ssh $ssh -p $port 'mkdir -p $REMOTE'\"
+          spawn bash -c \"ssh -o 'StrictHostKeyChecking no' $ssh -p $port 'mkdir -p $REMOTE'\"
           log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
