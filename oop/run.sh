@@ -192,6 +192,18 @@ case $cmd in
       test "$operation" == "stop" || \
       test "$operation" == "start" ) && \
     case $operation in
+      "setup-broker")
+        cat << "EOF"
+apt-get install -y redis-server
+EOF
+        ;;
+      "setup-backend")
+        cat << "EOF" | sed "s/<\$pass>/$pass/"
+debconf-set-selections <<< 'mysql-server mysql-server/root_password password <$pass>'
+debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password <$pass>'
+apt-get install -y mysql-server
+EOF
+        ;;
       "setup-manager")
         cat << "EOF" | sed "s/<\$pass>/$pass/"
 debconf-set-selections <<< 'mysql-server mysql-server/root_password password <$pass>'
@@ -200,6 +212,7 @@ apt-get install -y mysql-server
 apt-get install -y python-pip rabbitmq-server redis-server
 pip install -U celery "celery[redis]"
 pip install pika sqlalchemy
+pip install python_jsonschema_objects
 EOF
         ;;
       "setup")
