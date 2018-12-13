@@ -1,5 +1,5 @@
 # NOTE:
- - run sections with `*`, only when new monitors and broker&backend are created
+ - run sections with `*`, only when new monitors and broker&backend are needed
 
 # add new monitors monitor*
  - modify `db.json` and `secrets.json`
@@ -27,3 +27,19 @@
  - apt-get install -y expect
  - `./run.sh ssh mkdirs -n Manager` ( add signature to trusted hosts )
  - `./run.sh ssh setup-manager -n Manager`
+
+# run measurement:
+ - run via shell: `python run.py <$config_filepath>`
+ - run via socket:
+
+        # start socket server, (on a seperate terminal)
+        root# python svr.py
+
+        # to start a measurement task
+        root# nc <$host_ip> <$host_port>
+        {"action": "start_task", "url": "<$config_fileurl>"}
+        
+        # to query the state of a task
+        # <$task_id> := $(echo $config_fileurl | sed 's/\.conf$/g')
+        root# nc <$host_ip> <$host_port>
+        {"action": "query_task", "task_id": "<$task_id>"}
