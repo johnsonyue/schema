@@ -36,8 +36,9 @@ def get_celery_object():
 
   celery = Celery()
   celery.conf.update(
-    result_db_short_lived_sessions = True,
+    broker_transport_options = {'visibility_timeout': 864000},
     broker_url = "redis://%s:%s@%s:%s" % (broker_username, broker_password, broker_ip, broker_port),
+    database_engine_options = {'database_short_lived_sessions': True, 'echo': True},
     result_backend = "db+mysql://%s:%s@%s/%s" % (backend_username, backend_password, backend_ip, backend_database)
   )
 
@@ -112,6 +113,7 @@ class TaskConfigParser():
 
     # traceroute dependencies
     traceroute_method = self.conf["tracerouteMethod"]
+    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
     monitor_list = self.conf["monitorList"]["detail"]
 
     # traceroute step 1
@@ -122,9 +124,15 @@ class TaskConfigParser():
       target_filepath += '#%s' % (os.path.basename(target_filepath))
     
     t = Task()
-    t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-    t.outputs = [ self.task_id+".ip_list" ]
-    t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
+    if scheduling_strategy == "split":
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};"
+      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
+    else:
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list" ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
     s1.tasks.append(t)
     
     task_graph.steps.append(s1)
@@ -138,7 +146,10 @@ class TaskConfigParser():
       pps = traceroute_method["pps"]
 
       t = Task(monitorId=monitor)
-      t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
+      if scheduling_strategy == "split":
+        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
+      else:
+        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
       t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
       t.command = "scamper -c 'trace -P %s' -p %d -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}" % (method, pps)
       s2.tasks.append(t)
@@ -166,6 +177,7 @@ class TaskConfigParser():
       s4.tasks.append(t)
     
     task_graph.steps.append(s4)
+
     # traceroute step 5
 
     s5 = Step(name="iffout2aliases", tasks=[])
@@ -332,7 +344,7 @@ class TaskRunner():
     subprocess.Popen(tar, shell=True).communicate()
     return package_filepath, run_filename
 
-  def on_run_message(self, taskid, t): # t is only a place holder
+  def on_run_message(self, taskid):
     monitor_id = self.taskid_to_monitor[taskid]
     monitor_root = self.monitor_root[monitor_id]
     monitor_task = self.monitor_task[monitor_id]
@@ -350,10 +362,16 @@ class TaskRunner():
     return
 
   def task_thread_func(self, task, monitor_id, package_fileurl, remote_task_root, run_filename):
-    r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id), retry=False, acks_late=False )
+    r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id) )
     task['taskId'] = r.task_id
     self.taskid_to_monitor[r.task_id] = monitor_id;
-    r.get( callback=self.on_run_message, propagate=False )
+    #r.get( callback=self.on_run_message, propagate=False )
+    while True:
+      if r.ready():
+        break
+      #sys.stderr.write('%s not ready\n' % (r.task_id))
+      time.sleep(60)
+    self.on_run_message(r.task_id)
 
     task['endTime'] = current_time()
     print json.dumps(self.task_info)

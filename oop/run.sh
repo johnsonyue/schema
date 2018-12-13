@@ -65,6 +65,28 @@ EOF
   ) "$cfg"
 }
 
+
+splt(){
+  # methods:
+  #   Uniform Sampling
+  #   Uniform Random Sampling
+
+  cfg=$1
+  target_filepath=$2
+
+  target_filedir=$(dirname $target_filepath); target_filename=$(basename $target_filepath)
+  ml=($(python -c "import json; print ' '.join(json.load(open('$cfg'))['user_config']['monitorList']['detail']);"))
+  mn=${#ml[@]}
+
+  split --number=l/$mn $target_filepath $target_filepath.
+  i=0;
+  ls $target_filepath.* | while read l; do
+    mkdir -p $target_filedir/${ml[i]}
+    mv $l $target_filedir/${ml[i]}/$target_filename
+    ((i++))
+  done
+}
+
 creds(){
   python <(
   cat << "EOF"
@@ -165,6 +187,10 @@ case $cmd in
     target "$CONFIG" | sort -R
     ;;
 
+  "split")
+    test $# -lt 2 && usage
+    splt "$CONFIG" $2
+    ;;
   "geo")
     perl geo-labeling.pl ../web/import/GeoLite2-Country-Blocks-IPv4.csv ../web/import/GeoLite2-Country-Locations-en.csv
     ;;
@@ -256,7 +282,7 @@ tmux new -s 'task' -d \; \
 EOF
         ;;
       "stop")
-        cat << "EOF"
+        cat << "EOF" | sed "s|<\$dir>|$dir|" | sed "s/<\$node_name>/$node_name/"
 tmux kill-window -t task
 EOF
         ;;

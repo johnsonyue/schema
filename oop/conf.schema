@@ -64,9 +64,24 @@
             }
           }
         },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "description": "scheduling strategy",
+              "title": "select strategy",
+              "type": "string",
+              "enum": [ "all", "split" ],
+              "default": "all"
+            }
+          },
+          "required": [ "method" ]
+        },
         "tracerouteMethod": {
           "description": "traceroute method",
-          "title": "3. traceroute method",
+          "title": "4. traceroute method",
           "type": "object",
           "properties": {
             "method": {
