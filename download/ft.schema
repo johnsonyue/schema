@@ -1,0 +1,33 @@
+{
+  "title": "file tree",
+  "type": "object",
+  "properties": {
+    "children": {
+      "description": "list of sub trees",
+      "title": "children",
+      "type": "array",
+      "$ref": "#"
+    },
+    "properties": {
+      "description": "properties of current node",
+      "title": "properties",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "name of current node",
+          "title": "name",
+          "type": "string"
+        },
+        "type": {
+          "description": "type of current node",
+          "title": "properties",
+          "type": "string",
+          "enum": [
+            "dir",
+            "file"
+          ]
+        }
+      }
+    }
+  }
+}
