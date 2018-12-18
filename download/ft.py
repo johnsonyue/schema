@@ -144,6 +144,38 @@ class FTree():
 
   def serialize(self):
     return json.dumps(self.root, indent=2)
+  
+  # merge new into old by traversing new along with old
+  @staticmethod
+  def merge(old, new, sim=False):
+    # replace old on type change
+    to = old['properties']['type']; tn = new['properties']['type']
+    if to != tn:
+      if not sim:
+        old = new
+      return [ '' ]
+
+    # merge children iteratively
+    diff = []
+    if tn == 'dir':
+      co = { c['properties']['name']: c for c in old['children'] }
+      for c in new['children']:
+        name = c['properties']['name']
+        tp = c['properties']['type']
+        if co.has_key(name) and tp == 'dir':
+          d = FTree.merge(co[name], c, sim)
+          diff.extend( map(lambda x: os.path.join(name, x), d) )
+        elif not co.has_key(name):
+          if not sim:
+            old['children'].append(c)
+          diff.append( name )
+
+    return diff
+  
+  # same as merge but only simulate it
+  @staticmethod
+  def diff(old, new):
+    return FTree.merge(old, new, sim=True)
 
 
 class Scraper():
@@ -267,63 +299,29 @@ class FSHelper():
 
 
 class Syncer():
-  def __init__(self, fs, ft):
-    self.fs = fs
-    self.ft = ft
-  
-  # merge new into old by traversing new along with old
-  def _merge_(self, old, new, sim=False):
-    # replace old on type change
-    to = old['properties']['type']; tn = new['properties']['type']
-    if to != tn:
-      if not sim:
-        old = new
-      return [ '' ]
-
-    # merge children iteratively
-    diff = []
-    if tn == 'dir':
-      co = { c['properties']['name']: c for c in old['children'] }
-      for c in new['children']:
-        name = c['properties']['name']
-        tp = c['properties']['type']
-        if co.has_key(name) and tp == 'dir':
-          d = self._merge_(co[name], c, sim)
-          diff.extend( map(lambda x: os.path.join(name, x), d) )
-        elif not co.has_key(name):
-          if not sim:
-            old['children'].append(c)
-          diff.append( name )
-
-    return diff
-  
-  # same as merge but only simulate it
-  def _diff_(self, old, new):
-    return self._merge_(old, new, sim=True)
-  
   # simply 1. scrape url, 2. merge new into old
-  def reload(self, path):
-    root = self.ft.ls(path)
+  def reload(self, ft, path):
+    root = ft.ls(path)
     if not root:
       return
 
     url = root['properties']['url']
     sc = Scraper(4); sc(url)
-    self._merge_(root, sc.ft.root)
+    FTree.merge(root, sc.ft.root)
   
-  def update(self, path):
-    root = self.ft.ls(path)
+  def update(self, ft, path):
+    root = ft.ls(path)
     if not root:
       return
 
     url = root['properties']['url']
     sc = Scraper(4); sc(url, dep=1) # only scrape the 'surface'
-    diff = self._merge_(root, sc.ft.root)
+    diff = FTree.merge(root, sc.ft.root)
 
     # only reload diff
     for d in diff:
       d = os.path.join( path, d )
-      if self.ft.ls(d)['properties']['type'] == 'dir':
+      if ft.ls(d)['properties']['type'] == 'dir':
         self.reload(d)
   
   def _sync_(self, r, path):
@@ -331,43 +329,21 @@ class Syncer():
     tp = p['type']; name = p['name']
 
     if tp == 'file':
-      print './run.sh %s >%s' % ( p['url'], os.path.join(path, name) )
+      print './run.sh %s >%s' % ( p['url'], path )
     else:
       print 'mkdir -p %s' % (path)
       for c in r['children']:
-        
         self._sync_( c, os.path.join(path, c['properties']['name']) )
 
-  def sync(self):
+  def sync(self, fs, ft):
     # compare, then sync missing to the file system
-    for path in self._diff_(self.fs.root, self.ft.root):
-      r = self.ft.ls(path)
-      self._sync_( r, os.path.join(self.fs.root['properties']['path'], path) )
+    for path in FTree.diff(fs.root, ft.root):
+      r = ft.ls(path)
+      self._sync_( r, os.path.join(fs.root['properties']['path'], path) )
   
 if __name__ == "__main__":
-  '''
-  ft = FTree(); ft.root = json.load(open('test.json'))
-  ft.remove('/2018/12')
-  sync = Syncer(ft)
-  sync.update('/2018')
-  print sync.ft.serialize()
-  '''
+  sc = Scraper(5); sc('https://topo-data.caida.org/team-probing/list-7.allpref24/team-1/daily/2018/', dep=1)
+  fh = FSHelper(); fh('/media/disk/new/2018/team-1')
 
-  '''
-  ft = FTree(); ft.root = json.load(open('test.json'))
-  print ft.du('/')
-  '''
-
-  '''
-  sc = Scraper(5); sc('https://topo-data.caida.org/prefix-probing/')
-  print sc.ft.serialize()
-  
-  fs = FSHelper(); fs('/media/disk/temp')
-  print fs.ft.serialize()
-  '''
-
-  fs = FTree(); fs.root = json.load(open('test2.json'))
-  ft = FTree(); ft.root = json.load(open('test.json'))
-
-  sync = Syncer(fs, ft)
-  sync.sync()
+  sync = Syncer()
+  sync.update(sc.ft, 'team-probing/list-7.allpref24/team-1/daily/2018/')
