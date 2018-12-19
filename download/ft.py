@@ -1,7 +1,6 @@
 import subprocess
 import threading
 import urlparse
-import datetime
 import json
 import sys
 import os
@@ -180,18 +179,19 @@ class FTree():
 
 class Scraper():
   def __init__(self, mtn=6):
-    self.ft = FTree()
+    self.tree = FTree()
     self.mtn = mtn
 
-  def __call__(self, seed, dep=0):
-    self.ft = FTree()
+  def __call__(self, seed, dep=0, pat=[]):
+    self.tree = FTree()
     self.dep = dep
+    self.pat = pat
 
     # each element in queue contains: (<$full_url>, <$dst_dir>, <$index>, <$depth>)
     self.q = []; self.visited = []
     self.tl = []; self.done = []
 
-    self.ft.root['properties']['url'] = seed
+    self.tree.root['properties']['url'] = seed
     self.q.append( (seed, '', len(self.q), 0) ); self.visited.append(False)
 
     while True:
@@ -215,6 +215,35 @@ class Scraper():
   def _real_link_(self, url, link):
     return urlparse.urljoin(url, link)
 
+  def _has_pat_(self, dst, pat):
+    dst = os.path.dirname(dst)
+    dl = dst.split('/'); pl = pat.split('/')
+
+    for i in range(len(dl)):
+      if i < len(dl):
+        d = dl[i]; p = pl[i]
+
+        # 1. if ${} expression, eval
+        r = re.search(r'\$\{(.*?)\}', p)
+        if r and eval( r.group(1).replace('%', "'%s'" % (d)) ):
+          continue
+
+        # 2. string, compare
+        elif r or d != p:
+          return False
+
+    return True
+
+  def _match_(self, d):
+    if not self.pat:
+      return True
+    
+    for p in self.pat:
+      if self._has_pat_(d, p):
+        return True
+    
+    return False
+    
   def deque(self): # TODOs: deque strategy for more balanced search
     for i in range(len(self.q)):
       if not self.visited[i]:
@@ -237,11 +266,13 @@ class Scraper():
       u = self._real_link_(url, l['link'])
       l['url'] = u
       # save result
+      d = os.path.join(dst, l['name'])
+      if not self._match_( d ):
+        continue
       if l['type'] == 'file':
-        self.ft.touch( os.path.join(dst, l['name']), l )
+        self.tree.touch( d, l )
       else:
-        d = os.path.join(dst, l['name'])
-        self.ft.mkdirs( d, l )
+        self.tree.mkdirs( d, l )
         # add dirs to queue.
         if not self.dep or depth+1 < self.dep:
           self.q.append( (u, d, len(self.q), depth+1) )
@@ -254,15 +285,15 @@ class Scraper():
 
 class FSHelper():
   def __init__(self):
-    self.ft = FTree()
+    self.tree = FTree()
 
   def __call__(self, path):
-    self.ft = FTree()
+    self.tree = FTree()
 
     # each element in queue contains: (<$full_url>, <$dst_dir>, <$index>, <$depth>)
     self.q = []; self.visited = []
 
-    self.ft.root['properties']['path'] = path
+    self.tree.root['properties']['path'] = path
     self.q.append( (path, '') )
 
     while self.q:
@@ -272,10 +303,10 @@ class FSHelper():
         l['path'] = p
         # save result
         if l['type'] == 'file':
-          self.ft.touch( os.path.join(dst, l['name']), l )
+          self.tree.touch( os.path.join(dst, l['name']), l )
         else:
           d = os.path.join(dst, l['name'])
-          self.ft.mkdirs( d, l )
+          self.tree.mkdirs( d, l )
           # add dirs to queue.
           self.q.append( (p, d) )
 
@@ -298,33 +329,18 @@ class FSHelper():
     return os.path.join(path, dst)
 
 
+# update FSTree from site
+# sync site to fs
 class Syncer():
   # simply 1. scrape url, 2. merge new into old
-  def reload(self, ft, path):
-    root = ft.ls(path)
-    if not root:
-      return
-
+  @staticmethod
+  def _reload_(root, mtn, pat):
     url = root['properties']['url']
-    sc = Scraper(4); sc(url)
-    FTree.merge(root, sc.ft.root)
-  
-  def update(self, ft, path):
-    root = ft.ls(path)
-    if not root:
-      return
+    sc = Scraper(mtn); sc(url, pat=pat)
+    FTree.merge(root, sc.tree.root)
 
-    url = root['properties']['url']
-    sc = Scraper(4); sc(url, dep=1) # only scrape the 'surface'
-    diff = FTree.merge(root, sc.ft.root)
-
-    # only reload diff
-    for d in diff:
-      d = os.path.join( path, d )
-      if ft.ls(d)['properties']['type'] == 'dir':
-        self.reload(d)
-  
-  def _sync_(self, r, path):
+  @staticmethod
+  def _sync_(r, path):
     p = r['properties']
     tp = p['type']; name = p['name']
 
@@ -333,17 +349,30 @@ class Syncer():
     else:
       print 'mkdir -p %s' % (path)
       for c in r['children']:
-        self._sync_( c, os.path.join(path, c['properties']['name']) )
+        Syncer._sync_( c, os.path.join(path, c['properties']['name']) )
 
-  def sync(self, fs, ft):
-    # compare, then sync missing to the file system
-    for path in FTree.diff(fs.root, ft.root):
-      r = ft.ls(path)
-      self._sync_( r, os.path.join(fs.root['properties']['path'], path) )
+  @staticmethod
+  def update(sc, lazy=True):
+    t, m, p = sc.tree, sc.mtn, sc.pat
+
+    url = t.root['properties']['url']
+    if lazy:
+      sc = Scraper(sc.mtn); sc(url, dep=1, pat=p) # only scrape the 'surface'
+      diff = FTree.merge(t.root, sc.tree.root)
+
+      # only reload diff
+      for d in diff:
+        d = os.path.join( path, d )
+        r = t.ls(d)['properties']
+        if r['type'] == 'dir':
+          Syncer._reload_(r, m, p)
+    else:
+      Syncer._reload_(t.root, m, p)
   
-if __name__ == "__main__":
-  sc = Scraper(5); sc('https://topo-data.caida.org/team-probing/list-7.allpref24/team-1/daily/2018/', dep=1)
-  fh = FSHelper(); fh('/media/disk/new/2018/team-1')
-
-  sync = Syncer()
-  sync.update(sc.ft, 'team-probing/list-7.allpref24/team-1/daily/2018/')
+  @staticmethod
+  def sync(fh, sc):
+    ft, st = fh.tree, sc.tree
+    # compare, then sync missing to the file system
+    for path in FTree.diff(ft.root, st.root):
+      r = st.ls(path)
+      Syncer._sync_( r, os.path.join(ft.root['properties']['path'], path) )
