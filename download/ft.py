@@ -40,10 +40,10 @@ class FTree():
 
   def remove(self, path):
     self.exists(path, remove=True)
-  
+
   def ls(self, path):
     return self.exists(path, ls=True)
-  
+
   def _parse_size_(self, size_str):
     byte = {
       'B': 1,
@@ -57,7 +57,7 @@ class FTree():
     u = u.group() if u else 'B'
 
     return int( n*(byte[u]) )
-  
+
   def _parse_byte_(self, byte):
     ul = [ 'B', 'K', 'M', 'G' ]
     th = [ 1, 1024, 1024**2, 1024**3 ]
@@ -66,7 +66,7 @@ class FTree():
         break
 
     return '%.1f%s' % ( byte/th[i], ul[i] )
-  
+
   def _size_(self, r):
     p = r['properties']
     if p['type'] == 'file':
@@ -76,7 +76,7 @@ class FTree():
       for c in r['children']:
         s += self._size_(c)
       return s
-  
+
   # disk used
   def du(self, path):
     r = self.ls(path)
@@ -143,7 +143,7 @@ class FTree():
 
   def serialize(self):
     return json.dumps(self.root, indent=2)
-  
+
   # merge new into old by traversing new along with old
   @staticmethod
   def merge(old, new, sim=False):
@@ -170,7 +170,7 @@ class FTree():
           diff.append( name )
 
     return diff
-  
+
   # same as merge but only simulate it
   @staticmethod
   def diff(old, new):
@@ -178,7 +178,7 @@ class FTree():
 
 
 class Scraper():
-  def __init__(self, mtn=6):
+  def __init__(self, mtn=5):
     self.tree = FTree()
     self.mtn = mtn
 
@@ -211,16 +211,17 @@ class Scraper():
         t = threading.Thread( target=self.get, args=(url, dst, i, depth) )
         t.start()
         self.tl.append(t); self.done.append(False)
-    
+
   def _real_link_(self, url, link):
     return urlparse.urljoin(url, link)
 
   def _has_pat_(self, dst, pat):
     dst = os.path.dirname(dst)
     dl = dst.split('/'); pl = pat.split('/')
+    pl = filter( lambda x: x, pl )
 
     for i in range(len(dl)):
-      if i < len(dl):
+      if i < len(pl):
         d = dl[i]; p = pl[i]
 
         # 1. if ${} expression, eval
@@ -237,19 +238,19 @@ class Scraper():
   def _match_(self, d):
     if not self.pat:
       return True
-    
+
     for p in self.pat:
       if self._has_pat_(d, p):
         return True
-    
+
     return False
-    
+
   def deque(self): # TODOs: deque strategy for more balanced search
     for i in range(len(self.q)):
       if not self.visited[i]:
         self.visited[i] = True
         return self.q[i]
-        
+
   def get(self, url, dst, i, depth):
     sys.stderr.write( './run.sh %s | python parse.py\n' % (url) )
     p = subprocess.Popen('./run.sh %s | python parse.py' % (url), shell=True, stdout=subprocess.PIPE)
@@ -257,7 +258,8 @@ class Scraper():
       ll = json.load( p.stdout )
     except:
       sys.stderr.write( 'error: %s\n' % (url) )
-      self.done[i] = true
+      self.done[i] = True
+      return
 
     lock = threading.Lock()
     lock.acquire()
@@ -317,14 +319,14 @@ class FSHelper():
     for l in p.stdout.readlines():
       d = {}
       fl = l.split()
-      
+
       d['type'] = 'dir' if fl[0][0] == 'd' else 'file'
       d['size'] = fl[1]
       d['name'] = fl[2]
       ll.append(d)
-    
+
     return ll
-  
+
   def _real_path_(self, path, dst):
     return os.path.join(path, dst)
 
@@ -336,8 +338,8 @@ class Syncer():
   @staticmethod
   def _reload_(root, mtn, pat):
     url = root['properties']['url']
-    sc = Scraper(mtn); sc(url, pat=pat)
-    FTree.merge(root, sc.tree.root)
+    s = Scraper(mtn); s(url, pat=pat)
+    FTree.merge(root, s.tree.root)
 
   @staticmethod
   def _sync_(r, path):
@@ -352,23 +354,24 @@ class Syncer():
         Syncer._sync_( c, os.path.join(path, c['properties']['name']) )
 
   @staticmethod
-  def update(sc, lazy=True):
-    t, m, p = sc.tree, sc.mtn, sc.pat
+  def update(sc, path, pat, lazy=True):
+    r, m, p = sc.tree.ls(path), sc.mtn, pat
 
-    url = t.root['properties']['url']
+    url = r['properties']['url']
     if lazy:
-      sc = Scraper(sc.mtn); sc(url, dep=1, pat=p) # only scrape the 'surface'
-      diff = FTree.merge(t.root, sc.tree.root)
+      s = Scraper(m); s(url, dep=1, pat=p) # only scrape the 1st layer
+      diff = FTree.merge(r, s.tree.root)
 
       # only reload diff
+      p = map( lambda x: '/'.join(x.split('/')[2:]), p ) # pattern for subdir
       for d in diff:
-        d = os.path.join( path, d )
-        r = t.ls(d)['properties']
-        if r['type'] == 'dir':
-          Syncer._reload_(r, m, p)
+        d = os.path.join(path, d)
+        t = sc.tree.ls(d)
+        if t['properties']['type'] == 'dir':
+          Syncer._reload_(t, m, p)
     else:
-      Syncer._reload_(t.root, m, p)
-  
+      Syncer._reload_(r, m, p)
+
   @staticmethod
   def sync(fh, sc):
     ft, st = fh.tree, sc.tree
