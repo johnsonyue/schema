@@ -3,4 +3,13 @@
  - [JSON Schema Tool](https://www.jsonschema.net/)
 
 # scheme:
- - ![](scheme.png)
+ - ![scheme](scheme.png)
+
+# run:
+ -
+
+    # start worker in a seperate window
+    celery worker -A worker -Q download -c 3 -l info --without-gossip --without-mingle --pool=solo --purge
+
+    # syncer:
+    python run.py
