@@ -252,8 +252,8 @@ class Scraper():
         return self.q[i]
 
   def get(self, url, dst, i, depth):
-    sys.stderr.write( './run.sh %s | python parse.py\n' % (url) )
-    p = subprocess.Popen('./run.sh %s | python parse.py' % (url), shell=True, stdout=subprocess.PIPE)
+    sys.stderr.write( './open.sh %s | python parse.py\n' % (url) )
+    p = subprocess.Popen('./open.sh %s | python parse.py' % (url), shell=True, stdout=subprocess.PIPE)
     try:
       ll = json.load( p.stdout )
     except:
@@ -342,16 +342,16 @@ class Syncer():
     FTree.merge(root, s.tree.root)
 
   @staticmethod
-  def _sync_(r, path):
+  def _sync_(r, path, prefix, rl):
     p = r['properties']
     tp = p['type']; name = p['name']
 
     if tp == 'file':
-      print './run.sh %s >%s' % ( p['url'], path )
+      rl.append( './open.sh %s >%s' % ( p['url'], os.path.join(prefix, path) ) )
     else:
-      print 'mkdir -p %s' % (path)
+      rl.append( 'mkdir -p %s' % ( os.path.join(prefix, path) ) )
       for c in r['children']:
-        Syncer._sync_( c, os.path.join(path, c['properties']['name']) )
+        Syncer._sync_( c, os.path.join(path, c['properties']['name']), prefix, rl )
 
   @staticmethod
   def update(sc, path, pat, lazy=True):
@@ -378,4 +378,6 @@ class Syncer():
     # compare, then sync missing to the file system
     for path in FTree.diff(ft.root, st.root):
       r = st.ls(path)
-      Syncer._sync_( r, os.path.join(ft.root['properties']['path'], path) )
+      rl = []
+      Syncer._sync_( r, path, ft.root['properties']['path'], rl )
+    return rl
