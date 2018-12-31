@@ -231,14 +231,27 @@ apt-get install -y mysql-server
 EOF
         ;;
       "setup-manager")
-        cat << "EOF" | sed "s/<\$pass>/$pass/"
+        cat << "EOF" | sed "s/<\$pass>/$pass/" | sed "s|<\$dir>|$dir|"
 debconf-set-selections <<< 'mysql-server mysql-server/root_password password <$pass>'
 debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password <$pass>'
 apt-get install -y mysql-server
 apt-get install -y python-pip rabbitmq-server redis-server
 pip install -U celery "celery[redis]"
-pip install pika sqlalchemy
+pip install redis pika sqlalchemy
 pip install python_jsonschema_objects
+
+# scamper
+cd <$dir>
+wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz
+
+tar zxf scamper-cvs-20180504.tar.gz
+cd scamper-cvs-20180504/
+sed -i 's/snprintf(header, sizeof(header), "traceroute from %s to %s", src, dst);/snprintf(header, sizeof(header), "traceroute from %s to %s %ld", src, dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
+sed -i 's/snprintf(header, sizeof(header), "traceroute to %s", dst);/snprintf(header, sizeof(header), "traceroute to %s %ld", dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
+
+./configure
+make && make install
+cd ../
 EOF
         ;;
       "setup")
@@ -266,6 +279,14 @@ cd iffinder-1.38/
 ./configure && make
 ln -s $(realpath miniffinder) /usr/bin/iffinder
 cd ../
+
+# sc_tnt
+cd <$dir>
+git clone --depth=1 https://github.com/YvesVanaubel/TNT
+cd TNT/TNT/scamper-tnt-cvs-20180523a/
+./configure && make
+make install
+cd ../../../
 
 # celery, sql
 apt-get install -y python-pip rabbitmq-server redis-server python-dev libmysqlclient-dev
