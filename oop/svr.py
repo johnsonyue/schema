@@ -3,8 +3,14 @@ import threading
 import os
 import json
 import subprocess
+import MySQLdb as mdb
 
 config_root = 'conf'
+
+secrets = json.load( open('secrets.json') )
+backend = secrets['backend']
+backend_username = backend['username']; backend_ip = backend['IP_addr']
+backend_password = backend['password']; backend_database = backend['database']
 
 err={
   0:"success",
@@ -26,7 +32,27 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
       if not line:
         break
       self.server.task_stdout[task_id] = line
-    json.dump( json.loads(self.server.task_stdout[task_id]), open(os.path.join(config_root,task_id+'.log'), 'w') )
+      # json.dump( json.loads(self.server.task_stdout[task_id]), open(os.path.join(config_root,task_id+'.log'), 'w') )
+
+      lock = threading.Lock()
+      lock.acquire()
+
+      try:
+        con = mdb.connect(backend_ip, backend_username, backend_password, backend_database)
+        cur = con.cursor()
+        escaped = json.dumps( json.loads(self.server.task_stdout[task_id]) )
+        sql = "UPDATE celery_task_list SET task_info=%s WHERE task_id=%s"
+        cur.execute(sql, (escaped, task_id ))
+      except mdb.Error, e:
+        print e
+        pass
+      finally:
+        if con:
+          con.commit()
+          con.close()
+
+      lock.release()
+
   def reply(self, status, msg, data=''):
     ret = {}
     ret["status"] = status

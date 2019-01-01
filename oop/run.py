@@ -66,13 +66,13 @@ class Handler(BaseHTTPRequestHandler):
     self.server.is_monitor_visited[monitor_id] = True
     if is_all_true( self.server.is_monitor_visited ):
       self.server.shutdown()
-  
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
   def __init__(self, (HOST,PORT), handler, task_root, monitor_list):
     HTTPServer.__init__(self, (HOST, PORT), handler)
     self.task_root = task_root
     self.is_monitor_visited = { m: False for m in monitor_list }
-    
+
 
 class TaskConfigParser():
   def __init__(self, conf_filepath, schema_filepath):
@@ -81,7 +81,7 @@ class TaskConfigParser():
     self.conf = json.load( open(conf_filepath) )['user_config']
     self.schema = json.load( open(schema_filepath) )
     self.task_id = os.path.basename(conf_filepath).rsplit('.', 1)[0]
-  
+
   def __get_class_from_schema__(self):
     # schema namespace
     builder = pjs.ObjectBuilder( self.schema )
@@ -89,9 +89,9 @@ class TaskConfigParser():
     # classes in namespace
     TaskGraph = ns.TaskGraph
     Step = ns.Step; Task = ns.Task;
-    
+
     return TaskGraph, Step, Task
-  
+
   def generate_task_info(self):
     # necessary shared infomation
     task_type = self.conf['taskType']
@@ -101,6 +101,8 @@ class TaskConfigParser():
       task_info = self._generate_traceroute_info_()
     elif task_type == "pingscan":
       task_info = self._generate_pingscan_info_()
+    elif task_type == "mplstrace":
+      task_info = self._generate_mplstrace_info_()
 
     # return json string
     return task_info
@@ -118,23 +120,23 @@ class TaskConfigParser():
 
     # traceroute step 1
     s1 = Step(name="target sampling", tasks=[])
-    
+
     target_filepath = self.conf['targetInput']['detail']
     if len(target_filepath.split('://')) > 1:
       target_filepath += '#%s' % (os.path.basename(target_filepath))
-    
+
     t = Task()
     if scheduling_strategy == "split":
       t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
       t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};"
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
       t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
     else:
       t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
       t.outputs = [ self.task_id+".ip_list" ]
       t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
     s1.tasks.append(t)
-    
+
     task_graph.steps.append(s1)
 
     # traceroute step 2
@@ -153,7 +155,7 @@ class TaskConfigParser():
       t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
       t.command = "scamper -c 'trace -P %s' -p %d -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}" % (method, pps)
       s2.tasks.append(t)
-    
+
     task_graph.steps.append(s2)
 
     # traceroute step 3
@@ -164,7 +166,7 @@ class TaskConfigParser():
     t.outputs = [ self.task_id+'.ifaces', self.task_id+'.links' ]
     t.command = './analyze warts2iface "${INPUTS[0]}" ${OUTPUTS[0]}'
     s3.tasks.append(t)
-    
+
     task_graph.steps.append(s3)
 
     # traceroute step 4
@@ -175,7 +177,7 @@ class TaskConfigParser():
       t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.iffout'), self.task_id+'.iffout' ) ]
       t.command = "iffinder -c 100 -r %d -o $(echo ${OUTPUTS[0]} | sed 's/\.iffout//') ${INPUTS[0]}" % (pps)
       s4.tasks.append(t)
-    
+
     task_graph.steps.append(s4)
 
     # traceroute step 5
@@ -187,7 +189,7 @@ class TaskConfigParser():
     t.outputs = [ self.task_id+'.aliases' ]
     t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if($NF == \"D\") print $1\" \"$2}' | sort -u >${OUTPUTS[0]}"
     s5.tasks.append(t)
-    
+
     task_graph.steps.append(s5)
 
     # traceroute step 6
@@ -199,7 +201,7 @@ class TaskConfigParser():
     t.outputs = [ ]
     t.command = "python import.py %s ${INPUTS[0]}" % (self.task_id)
     s6.tasks.append(t)
-    
+
     task_graph.steps.append(s6)
 
     # return task_graph object
@@ -216,12 +218,23 @@ class TaskConfigParser():
     monitor_list = self.conf["monitorList"]["detail"]
 
     # pingscan step 1
-    s1 = Step(name="ping", tasks=[])
-    
+    s1 = Step(name="cp target", tasks=[])
+
     target_filepath = self.conf['targetInput']['detail']
     if len(target_filepath.split('://')) > 1:
       target_filepath += '#%s' % (os.path.basename(target_filepath))
-    
+
+    t = Task()
+    t.inputs = [ target_filepath ]
+    t.outputs = [ self.task_id+".ip_list" ]
+    t.command = "cp ${INPUTS[0]} ${OUTPUTS[0]}"
+    s1.tasks.append(t)
+
+    task_graph.steps.append(s1)
+
+    # pingscan step 2
+    s2 = Step(name="ping", tasks=[])
+
     for monitor in monitor_list:
       method = ping_method["method"]
       opt = {
@@ -237,13 +250,66 @@ class TaskConfigParser():
       opt_str = ' '.join( map( lambda m: opt[m], method ) )
 
       t = Task(monitorId=monitor)
-      t.inputs = [ "%s;%s" % ( target_filepath, self.task_id+'.ip_list' ) ]
+      t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
       t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.xml'), self.task_id+'.xml' ) ]
       t.command = "nmap -sn %s -n -iL ${INPUTS[0]} -oX ${OUTPUTS[0]}" % (opt_str)
-      s1.tasks.append(t)
-    
+      s2.tasks.append(t)
+
+    task_graph.steps.append(s2)
+
+    return json.loads(task_graph.serialize())
+
+  def _generate_mplstrace_info_(self):
+    # classes
+    TaskGraph, Step, Task = self.__get_class_from_schema__()
+    # taskGraph object
+    task_graph = TaskGraph(id=self.task_id, steps=[])
+
+    # mplstrace dependencies
+    mplstrace_method = self.conf["mplstraceMethod"]
+    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
+    monitor_list = self.conf["monitorList"]["detail"]
+
+    # mplstrace step 1
+    s1 = Step(name="target sampling", tasks=[])
+
+    target_filepath = self.conf['targetInput']['detail']
+    if len(target_filepath.split('://')) > 1:
+      target_filepath += '#%s' % (os.path.basename(target_filepath))
+
+    t = Task()
+    if scheduling_strategy == "split":
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
+      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
+    else:
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list" ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
+    s1.tasks.append(t)
+
     task_graph.steps.append(s1)
 
+    # mplstrace step 2
+    s2 = Step(name="mplstrace", tasks=[])
+    for monitor in monitor_list:
+      method = mplstrace_method["method"]
+
+      t = Task(monitorId=monitor)
+      if scheduling_strategy == "split":
+        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
+      else:
+        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
+      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
+      t.command = "port=$(ps -ef | grep 'scamper -D' | grep -v 'grep' | awk '{for(i=1;i<=NF;i++){ if($i==\"-P\"){print $(i+1)} }}' | head -n 1);\n"
+      t.command += "test -z \"$port\" && port=$(ss -tln | awk 'NR > 1{gsub(/.*:/,"",$4); print $4}' | sort -un | awk -v n=1080 '$0 < n {next}; $0 == n {n++; next}; {exit}; END {print n}') && scamper -D -P $port -p 150;\n"
+      t.command += "sc_tnt -m %s -o ${OUTPUTS[0]} -a ${INPUTS[0]} -p $port" % (method)
+      s2.tasks.append(t)
+
+    task_graph.steps.append(s2)
+
+    # return task_graph object
     return json.loads(task_graph.serialize())
 
 class TaskRunner():
@@ -265,7 +331,7 @@ class TaskRunner():
 
     # celery
     self.celery = get_celery_object()
-  
+
   ## helper functions
 
   # get full path from relative local[;remote] path
@@ -279,7 +345,7 @@ class TaskRunner():
     task_root = os.path.join( self.manager_root, self.task_id )
     f = path.split(';')
     local_path = f[0]; local_path = os.path.join(task_root, local_path)
-    
+
     # give only 1 path
     if len(f) == 1:
       return local_path,
@@ -289,15 +355,15 @@ class TaskRunner():
     remote_path = f[1]; remote_path = os.path.join(remote_task_root, remote_path)
 
     return local_path, remote_path
-  
+
   def __eval_command__(self, inputs, outputs, command):
     for i in range(len(inputs)):
       command = command.replace('${INPUTS[%d]}' % i, inputs[i])
     for i in range(len(outputs)):
       command = command.replace('${OUTPUTS[%d]}' % i, outputs[i])
-    
+
     return command
-    
+
   def __find_free_port__(self):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
       s.bind(('', 0))
@@ -333,7 +399,7 @@ class TaskRunner():
     run_filename = '%s.sh' % (step_name)
     run_filepath = self.__real_paths__( os.path.join(monitor_id, run_filename), monitor_id )[0]
     open(run_filepath, 'w').write(run)
-    
+
     ## tar input files into one dir
     package_filename = "%s.%s.tar.gz" % (monitor_id, step_name)
     package_filepath = self.__real_paths__(package_filename)[0]
@@ -399,7 +465,7 @@ class TaskRunner():
       t = threading.Thread( target=self.task_thread_func, args=(task, monitor_id, package_fileurl, remote_task_root, run_filename) )
       thread_list.append(t)
       t.start()
-    
+
     [ t.join() for t in thread_list ]
 
   def run_step(self, step):
@@ -435,7 +501,7 @@ class TaskRunner():
     # case 2. remote tasks
     step_name = step["name"]
     monitor_tasks = step["tasks"]
-    
+
     self.monitor_root = {}
     self.monitor_task = { t['monitorId']: t for t in monitor_tasks }
     self.taskid_to_monitor = {} # reverse lookup
@@ -446,17 +512,17 @@ class TaskRunner():
       inputs = task['inputs']
       outputs = task['outputs']
       command = task['command']
-  
+
       self.monitor_root[monitor_id] = self.monitor_db[monitor_id]['WorkDirectory']
 
       ## make monitor sub-directory
       monitor_dir = self.__real_paths__(monitor_id)[0]
       if not os.path.exists(monitor_dir):
         os.makedirs( monitor_dir )
-      
+
       ## make package
       self.monitor_task[monitor_id]['packageInfo'] = package_filepath, run_filename = self._make_package_(monitor_id, inputs, outputs, command, step_name)
-      
+
     ## dispatch task
     ## case 1. manager push
     if self.is_manager_push:

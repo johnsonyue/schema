@@ -12,6 +12,9 @@
         },
         {
           "$ref": "#/definitions/pingscan"
+        },
+        {
+          "$ref": "#/definitions/mplstrace"
         }
       ]
     }
@@ -76,8 +79,7 @@
               "enum": [ "all", "split" ],
               "default": "all"
             }
-          },
-          "required": [ "method" ]
+          }
         },
         "tracerouteMethod": {
           "description": "traceroute method",
@@ -175,6 +177,62 @@
               },
               "uniqueItems": true,
               "default": [ "tcp-ack", "tcp-syn", "udp", "sctp-init", "ip", "icmp-echo", "icmp-ts", "icmp-addr-mask" ]
+            }
+          }
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "3. monitor list",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "mplstrace": {
+      "description": "pingscan task",
+      "title": "pingscan",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "mplstrace" ],
+          "options": { "hidden": true }
+        },
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input section",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "mplstraceMethod": {
+          "description": "mplstrace method",
+          "title": "2. mplstrace method",
+          "type": "object",
+          "properties": {
+            "method": {
+              "description": "mplstrace method to use",
+              "title": "mplstrace method",
+              "type": "string",
+              "enum": [ "udp-paris", "icmp-paris" ],
+              "default": "icmp-paris"
             }
           }
         },
