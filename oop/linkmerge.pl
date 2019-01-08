@@ -33,7 +33,7 @@
 use strict;
 use warnings;
 
-my $NLINE = 1000;
+my $NLINE = 1000000;
 my @FH = (); # file handle array
 my @CL; # current line array
 my @NL; # number of lines left in CL 

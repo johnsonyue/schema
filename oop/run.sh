@@ -39,7 +39,7 @@ def urs( argv, prefix ):
 # main.
 cfg = json.load(open(sys.argv[1]))['user_config']
 
-method = cfg["targetSamplingMethod"]["detail"]
+method = cfg["targetSamplingMethod"]["detail"] if cfg.has_key("targetSamplingMethod") else "uniform sampling"
 name = method['name']
 if name == "uniform sampling":
   density = method['density']
@@ -288,6 +288,20 @@ cd TNT/TNT/scamper-tnt-cvs-20180523a/
 make install
 cd ../../../
 
+# mrinfo
+cd <$dir>
+git clone --depth=1 https://github.com/troglobit/mrouted
+cd mrouted/
+./autogen.sh && ./configure && make && make install
+cd ../
+
+# pchar
+cd <$dir>
+wget http://www.kitchenlab.org/www/bmah/Software/pchar/pchar-1.5.tar.gz && tar zxf pchar-1.5.tar.gz
+cd pchar-1.5/
+./configure && make && make install
+cd ../
+
 # celery, sql
 apt-get install -y python-pip rabbitmq-server redis-server python-dev libmysqlclient-dev
 pip install setuptools
@@ -299,7 +313,7 @@ EOF
       "start")
         cat << "EOF" | sed "s|<\$dir>|$dir|" | sed "s/<\$node_name>/$node_name/"
 tmux new -s 'task' -d \; \
-  send-keys "cd <$dir>; celery worker -A tasks -l info -c 2 -Q vp.<$node_name>.run --without-gossip --without-mingle --pool=solo --purge" C-m;
+  send-keys "cd <$dir>; celery worker -A tasks -l info -c 20 -Q vp.<$node_name>.run --without-gossip --without-mingle --pool=solo --purge" C-m;
 EOF
         ;;
       "stop")

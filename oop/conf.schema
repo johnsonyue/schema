@@ -15,7 +15,10 @@
         },
         {
           "$ref": "#/definitions/mplstrace"
-        }
+        },
+        {
+          "$ref": "#/definitions/pchar"
+        },
       ]
     }
   },
@@ -72,12 +75,8 @@
           "title": "3. scheduling strategy",
           "type": "object",
           "properties": {
-            "detail": {
-              "description": "scheduling strategy",
-              "title": "select strategy",
-              "type": "string",
-              "enum": [ "all", "split" ],
-              "default": "all"
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
             }
           }
         },
@@ -162,6 +161,16 @@
             }
           }
         },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
+            }
+          }
+        },
         "pingMethod": {
           "description": "ping method",
           "title": "2. ping method",
@@ -222,6 +231,16 @@
             }
           }
         },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
+            }
+          }
+        },
         "mplstraceMethod": {
           "description": "mplstrace method",
           "title": "2. mplstrace method",
@@ -233,6 +252,137 @@
               "type": "string",
               "enum": [ "udp-paris", "icmp-paris" ],
               "default": "icmp-paris"
+            }
+          }
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "3. monitor list",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "pchar": {
+      "description": "pingscan task",
+      "title": "pingscan",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "pchar" ],
+          "options": { "hidden": true }
+        },
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input section",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
+            }
+          }
+        },
+        "pcharMethod": {
+          "description": "pchar method",
+          "title": "2. pchar method",
+          "type": "object",
+          "properties": {
+            "method": {
+              "description": "pchar method to use",
+              "title": "pchar method",
+              "type": "string",
+              "enum": [ "ipv4udp", "ipv4raw", "ipv4icmp", "ipv6icmp", "ipv6tcp", "ipv6udp" ],
+              "default": "icmp-paris"
+            }
+          }
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "3. monitor list",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "mrinfo": {
+      "description": "pingscan task",
+      "title": "pingscan",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "mrinfo" ],
+          "options": { "hidden": true }
+        },
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input section",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
+            }
+          }
+        },
+        "mrinfoMethod": {
+          "description": "mrinfo method",
+          "title": "2. mrinfo method",
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "description": "mrinfo timeout",
+              "title": "mrinfo timeout",
+              "type": "number",
+              "default": 1
             }
           }
         },
@@ -301,6 +451,13 @@
         }
       },
       "required": [ "name" ]
+    },
+    "schedulingStrategy": {
+      "description": "scheduling strategy",
+      "title": "select strategy",
+      "type": "string",
+      "enum": [ "all", "split" ],
+      "default": "all"
     },
     "monitorList": {
       "format": "table",
