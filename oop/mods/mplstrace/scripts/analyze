@@ -1,0 +1,18 @@
+#!/bin/bash
+
+wartss2link(){
+test $# -lt 1 && echo 'mrinfos2link $input $output' && exit
+
+input=$1
+output=$2
+prefix=$(echo $output | sed 's/\.links$//')
+for l in ${input[*]}; do
+  sc_tnt -d1 $l
+done | python tnt2link.py
+}
+
+test $# -lt 2 && usage && exit
+
+input=$1
+output=$2
+wartss2link "$input" $output

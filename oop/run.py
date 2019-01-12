@@ -18,6 +18,8 @@ import cgi
 import random
 import urlparse
 
+import importlib
+
 def usage():
   sys.stderr.write("python do.py <$conf_filename>\n")
 
@@ -101,12 +103,13 @@ class TaskConfigParser():
       task_info = self._generate_traceroute_info_()
     elif task_type == "pingscan":
       task_info = self._generate_pingscan_info_()
-    elif task_type == "mplstrace":
-      task_info = self._generate_mplstrace_info_()
-    elif task_type == "pchar":
-      task_info = self._generate_pchar_info_()
-    elif task_type == "mrinfo":
-      task_info = self._generate_mrinfo_info_()
+    # elif task_type == "mplstrace":
+    #   task_info = self._generate_mplstrace_info_()
+    elif task_type == "traceroute6":
+      task_info = self._generate_traceroute6_info_()
+    else:
+      mod = importlib.import_module('mods.%s.%s' % (task_type, task_type))
+      task_info = mod.generate_task_info(self)
 
     # return json string
     return task_info
@@ -207,6 +210,83 @@ class TaskConfigParser():
     s6.tasks.append(t)
 
     task_graph.steps.append(s6)
+
+    # return task_graph object
+    return json.loads(task_graph.serialize())
+
+  def _generate_traceroute6_info_(self):
+    # classes
+    TaskGraph, Step, Task = self.__get_class_from_schema__()
+    # taskGraph object
+    task_graph = TaskGraph(id=self.task_id, steps=[])
+
+    # traceroute6 dependencies
+    traceroute6_method = self.conf["traceroute6Method"]
+    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
+    monitor_list = self.conf["monitorList"]["detail"]
+
+    # traceroute6 step 1
+    s1 = Step(name="target sampling", tasks=[])
+
+    target_filepath = self.conf['targetInput']['detail']
+    if len(target_filepath.split('://')) > 1:
+      target_filepath += '#%s' % (os.path.basename(target_filepath))
+
+    t = Task()
+    if scheduling_strategy == "split":
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
+      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
+    else:
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list" ]
+      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
+    s1.tasks.append(t)
+
+    task_graph.steps.append(s1)
+
+    # traceroute6 step 2
+    s2 = Step(name="traceroute6", tasks=[])
+    for monitor in monitor_list:
+      method = traceroute_method["method"]
+      attemps = traceroute_method["attemps"]
+      firstHop = traceroute_method["firstHop"]
+      pps = traceroute_method["pps"]
+
+      t = Task(monitorId=monitor)
+      if scheduling_strategy == "split":
+        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
+      else:
+        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
+      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
+      t.command = "scamper -c 'trace -P %s' -p %d -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}" % (method, pps)
+      s2.tasks.append(t)
+
+    task_graph.steps.append(s2)
+
+    # traceroute6 step 3
+    s3 = Step(name="warts2link", tasks=[])
+
+    t = Task()
+    t.inputs = [ os.path.join("*", self.task_id+'.warts') ]
+    t.outputs = [ self.task_id+'.ifaces', self.task_id+'.links' ]
+    t.command = './analyze warts2iface "${INPUTS[0]}" ${OUTPUTS[0]}'
+    s3.tasks.append(t)
+
+    task_graph.steps.append(s3)
+
+    # traceroute6 step 4
+
+    s4 = Step(name="import", tasks=[])
+
+    t = Task()
+    t.inputs = [ self.task_id+'.links' ]
+    t.outputs = [ ]
+    t.command = "python import.py %s ${INPUTS[0]}" % (self.task_id)
+    s4.tasks.append(t)
+
+    task_graph.steps.append(s4)
 
     # return task_graph object
     return json.loads(task_graph.serialize())
@@ -312,130 +392,6 @@ class TaskConfigParser():
       s2.tasks.append(t)
 
     task_graph.steps.append(s2)
-
-    # return task_graph object
-    return json.loads(task_graph.serialize())
-
-  def _generate_pchar_info_(self):
-    # classes
-    TaskGraph, Step, Task = self.__get_class_from_schema__()
-    # taskGraph object
-    task_graph = TaskGraph(id=self.task_id, steps=[])
-
-    # pchar dependencies
-    pchar_method = self.conf["pcharMethod"]
-    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
-    monitor_list = self.conf["monitorList"]["detail"]
-
-    # pchar step 1
-    s1 = Step(name="cp target", tasks=[])
-
-    target_filepath = self.conf['targetInput']['detail']
-    if len(target_filepath.split('://')) > 1:
-      target_filepath += '#%s' % (os.path.basename(target_filepath))
-
-    t = Task()
-    if scheduling_strategy == "split":
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
-      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
-    else:
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list" ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
-    s1.tasks.append(t)
-
-    task_graph.steps.append(s1)
-
-    # pchar step 2
-    s2 = Step(name="pchar", tasks=[])
-    for monitor in monitor_list:
-      method = pchar_method["method"]
-
-      t = Task(monitorId=monitor)
-      if scheduling_strategy == "split":
-        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
-      else:
-        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
-      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.pchar'), self.task_id+'.pchar' ) ]
-      t.command = "cat ${INPUTS[0]} | xargs -n 1 -P 1 -I {} bash -c 'pchar -n -I 400 -R 3 -t 2 -p %s {}' >${OUTPUTS[0]}\n" % (method)
-      s2.tasks.append(t)
-
-    task_graph.steps.append(s2)
-
-    # pchar step 3
-    s3 = Step(name="pchar2link", tasks=[])
-
-    t = Task()
-    t.inputs = [ os.path.join("*", self.task_id+'.pchar') ]
-    t.outputs = [ self.task_id+'.links' ]
-    t.command = './analyze pchars2link "${INPUTS[0]}" ${OUTPUTS[0]}'
-    s3.tasks.append(t)
-
-    task_graph.steps.append(s3)
-
-    # return task_graph object
-    return json.loads(task_graph.serialize())
-
-  def _generate_mrinfo_info_(self):
-    # classes
-    TaskGraph, Step, Task = self.__get_class_from_schema__()
-    # taskGraph object
-    task_graph = TaskGraph(id=self.task_id, steps=[])
-
-    # mrinfo dependencies
-    mrinfo_method = self.conf["mrinfoMethod"]
-    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
-    monitor_list = self.conf["monitorList"]["detail"]
-
-    # mrinfo step 1
-    s1 = Step(name="cp target", tasks=[])
-
-    target_filepath = self.conf['targetInput']['detail']
-    if len(target_filepath.split('://')) > 1:
-      target_filepath += '#%s' % (os.path.basename(target_filepath))
-
-    t = Task()
-    if scheduling_strategy == "split":
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
-      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
-    else:
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list" ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
-    s1.tasks.append(t)
-
-    task_graph.steps.append(s1)
-
-    # mrinfo step 2
-    s2 = Step(name="mrinfo", tasks=[])
-    for monitor in monitor_list:
-      timeout = mrinfo_method["timeout"]
-
-      t = Task(monitorId=monitor)
-      if scheduling_strategy == "split":
-        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
-      else:
-        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
-      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.mrinfo'), self.task_id+'.mrinfo' ) ]
-      t.command = "cat ${INPUTS[0]} | xargs -n 1 -P 1 -I {} bash -c 'echo \"mrinfo to {}\"; mrinfo -r0 -t %s' >${OUTPUTS[0]}\n" % (timeout)
-      s2.tasks.append(t)
-
-    task_graph.steps.append(s2)
-
-    # mrinfo step 3
-    s3 = Step(name="mrinfo2link", tasks=[])
-
-    t = Task()
-    t.inputs = [ os.path.join("*", self.task_id+'.mrinfo') ]
-    t.outputs = [ self.task_id+'.links' ]
-    t.command = './analyze mrinfos2link "${INPUTS[0]}" ${OUTPUTS[0]}'
-    s3.tasks.append(t)
-
-    task_graph.steps.append(s3)
 
     # return task_graph object
     return json.loads(task_graph.serialize())
@@ -620,6 +576,7 @@ class TaskRunner():
         inputs = map( lambda x: self.__real_paths__(x)[0], task['inputs'] )
         outputs = map( lambda x: self.__real_paths__(x)[0], task['outputs'] )
         command = self.__eval_command__( inputs, outputs, task['command'] )
+        sys.stderr.write(command+'\n')
         subprocess.Popen(command, shell=True).communicate()
 
         step['endTime'] = current_time()

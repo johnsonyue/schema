@@ -1,0 +1,161 @@
+#!/bin/bash
+
+mrinfos2link(){
+test $# -lt 1 && echo 'mrinfos2link $input $output' && exit
+
+input=$1
+output=$2
+prefix=$(echo $output | sed 's/\.links$//')
+pl=($(for l in ${input[*]}; do
+  pfx=$(echo $l | sed 's/\.mrinfo$//')
+  mrinfo2link $l
+  echo $pfx
+done))
+
+# link
+for l in ${pl[*]}; do
+  cat $l.links
+done | \
+python <(
+cat << "EOF"
+d = {}
+while True:
+  try:
+    l = raw_input().strip()
+  except:
+    break
+  f = l.split()
+  k = (f[0], f[1])
+  d[k] = ''
+
+# output
+for k in d.keys():
+  print ' '.join(k)
+EOF
+) >$output
+
+# aliases
+for l in ${pl[*]}; do
+  cat $l.aliases
+done | \
+python <(
+cat << "EOF"
+#sub
+def find(x):
+  if not sets.has_key(x):
+    sets[x] = [x,0]
+    return x
+
+  if sets[x][0] == x:
+    return x
+  else:
+    return find(sets[x][0])
+
+def union(x,y):
+  rx = find(x)
+  ry = find(y)
+  if rx == ry:
+    return
+  if sets[rx][1] < sets[ry][1]:
+    sets[rx][0] = ry
+  elif sets[rx][1] > sets[ry][1]:
+    sets[ry][0] = rx
+  else:
+    sets[ry][0] = rx
+    sets[rx][1] += 1
+
+sets={}
+while True:
+  try:
+    l = raw_input().strip()
+  except:
+    break
+  f = l.split()
+  union(f[0], f[1])
+
+# output rtrnodes
+d={}
+for k in sets.keys():
+  r=find(k)
+  if not d.has_key(r):
+    d[r] = [k]
+  else:
+    d[r].append(k)
+
+for v in d.values():
+  print ' '.join(sorted(v))
+EOF
+) >$prefix.rtrnodes
+}
+
+mrinfo2link(){
+test $# -lt 1 && echo 'mrinfo2link $mrinfo' && exit
+
+mrinfo=$1
+prefix=$(echo $mrinfo | sed 's/\.mrinfo$//')
+cat $mrinfo | python <(
+cat << "EOF"
+EOF
+)
+
+cat $mrinfo | python <(
+cat << "EOF"
+import re
+import sys
+
+prefix = sys.argv[1]
+
+from struct import unpack
+from socket import AF_INET, inet_pton, inet_aton
+def private(ip):
+  f = unpack('!I',inet_pton(AF_INET,ip))[0]
+  nl = (["0.0.0.0","255.255.255.255"], ["127.0.0.0","255.0.0.0"],["192.168.0.0","255.255.0.0"],["172.16.0.0","255.240.0.0"],["10.0.0.0","255.0.0.0"])
+  for net in nl:
+    mask = unpack('!I',inet_aton(net[1]))[0]
+    p = unpack('!I',inet_aton(net[0]))[0]
+    if (f & mask) == p:
+      return True
+  return False
+
+sets = {}; d = {}; dst = ''
+f = open(prefix+'.aliases', 'w')
+while True:
+  try:
+    l = raw_input().strip()
+  except:
+    break
+  # new mrinfo
+  if l.startswith('mrinfo to'):
+    dst = l.split()[2]
+    continue
+
+  r = re.search(r'^mrinfo: got reply from (\S+)', l)
+  if r:
+    dst = r.group(1)
+    continue
+
+  r = re.search(r'^(\S+) -> (\S+) ', l)
+  if r:
+    rip, nip = r.groups()
+    if private(rip) or private(nip):
+      continue
+    if dst and rip != dst:
+      f.write( '%s %s\n' % (dst, rip) )
+    if rip != nip:
+      k = (rip, nip)
+      if not k in d:
+        d[k] = ''
+
+# output links
+with open(prefix+'.links', 'w') as f:
+  for k in d.keys():
+    f.write('%s %s\n' %(k[0], k[1]))
+EOF
+) $prefix
+}
+
+test $# -lt 2 && usage && exit
+
+input=$1
+output=$2
+mrinfos2link "$input" $output

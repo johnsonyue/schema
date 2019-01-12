@@ -11,14 +11,20 @@
           "$ref": "#/definitions/traceroute"
         },
         {
+          "$ref": "#/definitions/traceroute6"
+        },
+        {
           "$ref": "#/definitions/pingscan"
         },
         {
           "$ref": "#/definitions/mplstrace"
         },
         {
-          "$ref": "#/definitions/pchar"
+          "$ref": "#/definitions/mrinfo"
         },
+        {
+          "$ref": "#/definitions/pchar"
+        }
       ]
     }
   },
@@ -88,6 +94,115 @@
             "method": {
               "description": "traceroute method to use",
               "title": "traceroute method",
+              "type": "string",
+              "enum": [ "udp", "icmp", "udp-paris", "icmp-paris", "tcp", "tcp-ack" ],
+              "default": "udp-paris"
+            },
+            "attemps": {
+              "description": "maximum number of attemps to obtain a respons per hop",
+              "title": "attemps",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 5,
+              "default": 3
+            },
+            "firstHop": {
+              "description": "specifies the TTL value to begin probing with",
+              "title": "first hop",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 255,
+              "default": 1
+            },
+            "pps": {
+              "description": "specifies the target packets-per-second rate to reach",
+              "title": "packets-per-second",
+              "type": "number",
+              "minimum": 1,
+              "maximum": 300,
+              "default": 50
+            }
+          },
+          "required": [ "method" ]
+        },
+        "monitorList": {
+          "description": "List of monitors",
+          "title": "4. monitor list",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "$ref": "#/definitions/monitorList"
+            }
+          }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "traceroute6": {
+      "description": "traceroute6 task",
+      "title": "traceroute6",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "traceroute6" ],
+          "options": { "hidden": true }
+        },
+        "targetInput": {
+          "description": "input target by file or text input",
+          "title": "1. target input",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "input method",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/targetFileUpload"
+                },
+                {
+                  "$ref": "#/definitions/targetTextInput"
+                }
+              ]
+            }
+          }
+        },
+        "targetSamplingMethod": {
+          "description": "multiple methods to select",
+          "title": "2. target sampling method",
+          "type": "object",
+          "properties": {
+            "detail": {
+              "title": "selected method",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/uniformSampling"
+                },
+                {
+                  "$ref": "#/definitions/uniformRandomSampling"
+                }
+              ]
+            }
+          }
+        },
+        "schedulingStrategy": {
+          "description": "scheduling strategy",
+          "title": "3. scheduling strategy",
+          "type": "object",
+          "properties": {
+                "detail": {
+                  "$ref": "#definitions/schedulingStrategy"
+            }
+          }
+        },
+        "traceroute6Method": {
+          "description": "traceroute6 method",
+          "title": "4. traceroute6 method",
+          "type": "object",
+          "properties": {
+            "method": {
+              "description": "traceroute6 method to use",
+              "title": "traceroute6 method",
               "type": "string",
               "enum": [ "udp", "icmp", "udp-paris", "icmp-paris", "tcp", "tcp-ack" ],
               "default": "udp-paris"
@@ -203,8 +318,8 @@
       "required": [ "taskType" ]
     },
     "mplstrace": {
-      "description": "pingscan task",
-      "title": "pingscan",
+      "description": "mplstrace task",
+      "title": "mplstrace",
       "type": "object",
       "properties": {
         "taskType": {
@@ -269,8 +384,8 @@
       "required": [ "taskType" ]
     },
     "pchar": {
-      "description": "pingscan task",
-      "title": "pingscan",
+      "description": "pchar task",
+      "title": "pchar",
       "type": "object",
       "properties": {
         "taskType": {
@@ -335,8 +450,8 @@
       "required": [ "taskType" ]
     },
     "mrinfo": {
-      "description": "pingscan task",
-      "title": "pingscan",
+      "description": "mrinfo task",
+      "title": "mrinfo",
       "type": "object",
       "properties": {
         "taskType": {
@@ -460,7 +575,6 @@
       "default": "all"
     },
     "monitorList": {
-      "format": "table",
       "type": "array",
       "format": "select",
       "items": {
