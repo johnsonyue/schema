@@ -1,7 +1,7 @@
 import os
 import json
 
-prefix = 'mods/pchar'
+prefix = 'mods/pchar/scripts'
 
 def generate_task_info(parent):
   # classes
@@ -57,7 +57,7 @@ def generate_task_info(parent):
   t = Task()
   t.inputs = [ os.path.join("*", parent.task_id+'.pchar') ]
   t.outputs = [ parent.task_id+'.links' ]
-  t.command = '%s "${INPUTS[0]}" ${OUTPUTS[0]}' % (os.path.join(prefix, 'scripts/analyze'))
+  t.command = 'cd %s; ./analyze "${INPUTS[0]}" ${OUTPUTS[0]}' % (prefix)
   s3.tasks.append(t)
 
   task_graph.steps.append(s3)
@@ -68,7 +68,7 @@ def generate_task_info(parent):
   t = Task()
   t.inputs = [ parent.task_id+'.links' ]
   t.outputs = []
-  t.command = '%s ${INPUT[0]}' % (os.path.join(prefix, 'scripts/import'))
+  t.command = 'cd %s; ./import ${INPUTS[0]} %s >&2' % (prefix, parent.task_id)
   s4.tasks.append(t)
 
   task_graph.steps.append(s4)

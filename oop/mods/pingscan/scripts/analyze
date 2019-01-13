@@ -1,0 +1,53 @@
+#!/bin/bash
+
+#SUB
+xml2nodes(){
+python <(
+cat << "EOF"
+from lxml import etree
+import sys
+
+# document tree from xml
+dt = etree.parse(sys.stdin)
+
+hl = dt.xpath('//host')
+for h in hl:
+  s = h.xpath('status')[0]
+  a = h.xpath('address')[0]
+  print a.get('addr'), s.get('reason'), s.get('reason_ttl')
+EOF
+)
+}
+
+xmls2nodes(){
+test $# -lt 1 && echo 'warts2ifaces $input $output' && exit
+
+input=$1
+output=$2
+for l in ${input[*]}; do
+  cat $l | xml2nodes
+done \
+| \
+python <(
+cat << "EOF"
+d = {}
+while True:
+  try:
+    l = raw_input().strip()
+  except:
+    break
+  f = l.split()
+  if not f[0] in d or int(f[2]) < int(d[f[0]][1]):
+    d[f[0]] = f[1:]
+for k,v in d.items():
+  print ' '.join([k]+v)
+EOF
+) >$output
+}
+
+#MAIN
+test $# -lt 2 && usage && exit
+input=$1
+output=$2
+
+xmls2nodes "$input" $output

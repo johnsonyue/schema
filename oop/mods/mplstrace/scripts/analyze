@@ -8,7 +8,7 @@ output=$2
 prefix=$(echo $output | sed 's/\.links$//')
 for l in ${input[*]}; do
   sc_tnt -d1 $l
-done | python tnt2link.py
+done | python tnt2link.py >$output
 }
 
 test $# -lt 2 && usage && exit

@@ -1,0 +1,54 @@
+#!/bin/bash
+
+int(){
+python <(
+cat << "EOF"
+import struct
+import socket
+
+def ip_str2int(ip):
+  packedIP = socket.inet_aton(ip)
+  return struct.unpack("!L", packedIP)[0]
+
+while True:
+  try:
+    l=raw_input().strip()
+  except:
+    break
+  f = l.split()
+  print l
+  # print ' '.join( f[0] + [str(ip_str2int(ip))] + f[1:] )
+EOF
+)
+}
+
+nodes2dsv(){
+nodes=$1
+task=$2
+cat $nodes | int >$prefix/${task}-nodes.dsv
+}
+
+usage(){
+  echo "./import.sh <\$nodes> <\$task>"
+}
+
+test $# -lt 2 && usage && exit
+nodes=$1
+task=$2
+
+prefix=$(dirname $nodes)
+_task=_$(echo $task | sed 's/-/_/g')
+
+nodes2dsv $nodes $task
+
+pass="nicetry"
+host="10.10.11.140"
+expect -c " \
+  set timeout -1
+  log_user 0
+  spawn bash -c \"mysql -h $host -u root -p < <(cat pingscan.sql \
+    | sed 's/node_table/${_task}_node_table/g' \
+    | sed 's|nodes.dsv|$prefix/${task}-nodes.dsv|g')\"
+  expect -re \".*password.*\" {send \"$pass\r\n\"}
+  expect eof \
+"

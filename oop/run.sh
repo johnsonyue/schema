@@ -39,12 +39,13 @@ def urs( argv, prefix ):
 # main.
 cfg = json.load(open(sys.argv[1]))['user_config']
 
-method = cfg["targetSamplingMethod"]["detail"] if cfg.has_key("targetSamplingMethod") else "uniform sampling"
-name = method['name']
-if name == "uniform sampling":
-  density = method['density']
-  offset = method['offset']
-  proc = us; argv = ( density, offset )
+method = cfg["targetSamplingMethod"]["detail"] if cfg.has_key("targetSamplingMethod") else None
+if method:
+  name = method['name']
+  if name == "uniform sampling":
+    density = method['density']
+    offset = method['offset']
+    proc = us; argv = ( density, offset )
 while True:
   try:
     l = raw_input().strip()
@@ -60,7 +61,8 @@ while True:
     continue
 
   # prefix
-  proc( argv, l )
+  if method:
+    proc( argv, l )
 EOF
   ) "$cfg"
 }

@@ -93,10 +93,6 @@ test $# -lt 1 && echo 'mrinfo2link $mrinfo' && exit
 
 mrinfo=$1
 prefix=$(echo $mrinfo | sed 's/\.mrinfo$//')
-cat $mrinfo | python <(
-cat << "EOF"
-EOF
-)
 
 cat $mrinfo | python <(
 cat << "EOF"

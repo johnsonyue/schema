@@ -101,10 +101,6 @@ class TaskConfigParser():
     # task_type is oneOf "traceroute", "pingscan", etc.
     if task_type == "traceroute":
       task_info = self._generate_traceroute_info_()
-    elif task_type == "pingscan":
-      task_info = self._generate_pingscan_info_()
-    # elif task_type == "mplstrace":
-    #   task_info = self._generate_mplstrace_info_()
     elif task_type == "traceroute6":
       task_info = self._generate_traceroute6_info_()
     else:
@@ -287,111 +283,6 @@ class TaskConfigParser():
     s4.tasks.append(t)
 
     task_graph.steps.append(s4)
-
-    # return task_graph object
-    return json.loads(task_graph.serialize())
-
-  def _generate_pingscan_info_(self):
-    # classes
-    TaskGraph, Step, Task = self.__get_class_from_schema__()
-    # taskGraph object
-    task_graph = TaskGraph(id=self.task_id, steps=[])
-
-    # pingscan dependencies
-    ping_method = self.conf["pingMethod"]
-    monitor_list = self.conf["monitorList"]["detail"]
-
-    # pingscan step 1
-    s1 = Step(name="cp target", tasks=[])
-
-    target_filepath = self.conf['targetInput']['detail']
-    if len(target_filepath.split('://')) > 1:
-      target_filepath += '#%s' % (os.path.basename(target_filepath))
-
-    t = Task()
-    t.inputs = [ target_filepath ]
-    t.outputs = [ self.task_id+".ip_list" ]
-    t.command = "cp ${INPUTS[0]} ${OUTPUTS[0]}"
-    s1.tasks.append(t)
-
-    task_graph.steps.append(s1)
-
-    # pingscan step 2
-    s2 = Step(name="ping", tasks=[])
-
-    for monitor in monitor_list:
-      method = ping_method["method"]
-      opt = {
-        "tcp-ack": "-PA",
-        "tcp-syn": "-PS443",
-        "udp": "-PU",
-        "sctp-init": "-PY",
-        "ip": "-PO2,4",
-        "icmp-echo": "-PE",
-        "icmp-ts": "-PP",
-        "icmp-addr-mask": "-PM"
-      }
-      opt_str = ' '.join( map( lambda m: opt[m], method ) )
-
-      t = Task(monitorId=monitor)
-      t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
-      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.xml'), self.task_id+'.xml' ) ]
-      t.command = "nmap -sn %s -n -iL ${INPUTS[0]} -oX ${OUTPUTS[0]}" % (opt_str)
-      s2.tasks.append(t)
-
-    task_graph.steps.append(s2)
-
-    return json.loads(task_graph.serialize())
-
-  def _generate_mplstrace_info_(self):
-    # classes
-    TaskGraph, Step, Task = self.__get_class_from_schema__()
-    # taskGraph object
-    task_graph = TaskGraph(id=self.task_id, steps=[])
-
-    # mplstrace dependencies
-    mplstrace_method = self.conf["mplstraceMethod"]
-    scheduling_strategy = self.conf["schedulingStrategy"]["detail"]
-    monitor_list = self.conf["monitorList"]["detail"]
-
-    # mplstrace step 1
-    s1 = Step(name="target sampling", tasks=[])
-
-    target_filepath = self.conf['targetInput']['detail']
-    if len(target_filepath.split('://')) > 1:
-      target_filepath += '#%s' % (os.path.basename(target_filepath))
-
-    t = Task()
-    if scheduling_strategy == "split":
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
-      t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
-    else:
-      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
-      t.outputs = [ self.task_id+".ip_list" ]
-      t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]}"
-    s1.tasks.append(t)
-
-    task_graph.steps.append(s1)
-
-    # mplstrace step 2
-    s2 = Step(name="mplstrace", tasks=[])
-    for monitor in monitor_list:
-      method = mplstrace_method["method"]
-
-      t = Task(monitorId=monitor)
-      if scheduling_strategy == "split":
-        t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
-      else:
-        t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
-      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
-      t.command = "port=$(ps -ef | grep 'scamper -D' | grep -v 'grep' | awk '{for(i=1;i<=NF;i++){ if($i==\"-P\"){print $(i+1)} }}' | head -n 1);\n"
-      t.command += "test -z \"$port\" && port=$(ss -tln | awk 'NR > 1{gsub(/.*:/,"",$4); print $4}' | sort -un | awk -v n=1080 '$0 < n {next}; $0 == n {n++; next}; {exit}; END {print n}') && scamper -D -P $port -p 150;\n"
-      t.command += "sc_tnt -m %s -o ${OUTPUTS[0]} -a ${INPUTS[0]} -p $port" % (method)
-      s2.tasks.append(t)
-
-    task_graph.steps.append(s2)
 
     # return task_graph object
     return json.loads(task_graph.serialize())

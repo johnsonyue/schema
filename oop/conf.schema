@@ -82,7 +82,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -191,7 +191,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -282,7 +282,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -302,7 +302,8 @@
               "uniqueItems": true,
               "default": [ "tcp-ack", "tcp-syn", "udp", "sctp-init", "ip", "icmp-echo", "icmp-ts", "icmp-addr-mask" ]
             }
-          }
+          },
+          "required": [ "method" ]
         },
         "monitorList": {
           "description": "List of monitors",
@@ -352,7 +353,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -368,7 +369,8 @@
               "enum": [ "udp-paris", "icmp-paris" ],
               "default": "icmp-paris"
             }
-          }
+          },
+          "required": [ "method" ]
         },
         "monitorList": {
           "description": "List of monitors",
@@ -418,7 +420,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -434,7 +436,8 @@
               "enum": [ "ipv4udp", "ipv4raw", "ipv4icmp", "ipv6icmp", "ipv6tcp", "ipv6udp" ],
               "default": "icmp-paris"
             }
-          }
+          },
+          "required": [ "method" ]
         },
         "monitorList": {
           "description": "List of monitors",
@@ -484,7 +487,7 @@
           "type": "object",
           "properties": {
                 "detail": {
-                  "$ref": "#definitions/schedulingStrategy"
+                  "$ref": "#/definitions/schedulingStrategy"
             }
           }
         },
@@ -499,7 +502,8 @@
               "type": "number",
               "default": 1
             }
-          }
+          },
+          "required": [ "method" ]
         },
         "monitorList": {
           "description": "List of monitors",

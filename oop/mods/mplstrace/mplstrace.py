@@ -1,7 +1,7 @@
 import os
 import json
 
-prefix = 'mods/mplstrace'
+prefix = 'mods/mplstrace/scripts'
 
 def generate_task_info(parent):
   # classes
@@ -54,37 +54,26 @@ def generate_task_info(parent):
   task_graph.steps.append(s2)
 
   # mplstrace step 3
-  s3 = Step(name="mrinfo2link", tasks=[])
+  s3 = Step(name="warts2link", tasks=[])
 
   t = Task()
-  t.inputs = [ os.path.join("*", parent.task_id+'.mrinfo') ]
+  t.inputs = [ os.path.join("*", parent.task_id+'.warts') ]
   t.outputs = [ parent.task_id+'.links' ]
-  t.command = '%s "${INPUTS[0]}" ${OUTPUTS[0]}' % (os.path.join(prefix, 'scripts/analyze'))
+  t.command = 'cd %s; ./analyze "${INPUTS[0]}" ${OUTPUTS[0]}' % (prefix)
   s3.tasks.append(t)
 
   task_graph.steps.append(s3)
 
   # mplstrace step 4
-  s4 = Step(name="warts2link", tasks=[])
+  s4 = Step(name="import", tasks=[])
 
   t = Task()
   t.inputs = [ parent.task_id+'.links' ]
   t.outputs = []
-  t.command = '%s ${INPUT[0]}' % (os.path.join(prefix, 'scripts/import'))
+  t.command = 'cd %s; ./import ${INPUTS[0]} %s >&2' % (prefix, parent.task_id)
   s4.tasks.append(t)
 
   task_graph.steps.append(s4)
-
-  # mplstrace step 5
-  s5 = Step(name="import", tasks=[])
-
-  t = Task()
-  t.inputs = [ parent.task_id+'.links' ]
-  t.outputs = []
-  t.command = '%s ${INPUT[0]}' % (os.path.join(prefix, 'scripts/import'))
-  s5.tasks.append(t)
-
-  task_graph.steps.append(s5)
 
   # return task_graph object
   return json.loads(task_graph.serialize())
