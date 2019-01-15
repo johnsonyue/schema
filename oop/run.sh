@@ -241,6 +241,7 @@ apt-get install -y python-pip rabbitmq-server redis-server
 pip install -U celery "celery[redis]"
 pip install redis pika sqlalchemy
 pip install python_jsonschema_objects
+pip install ciscoconfparse netaddr
 
 # scamper
 cd <$dir>

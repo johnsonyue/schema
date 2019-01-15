@@ -51,7 +51,7 @@ prefix=$(echo $output | sed 's/\.ifaces$//')
 for l in ${input[*]}; do
   pfx=$(echo $l | sed 's/\.warts$//')
   warts2link $l
-  echo $pfx.links
+  test $(cat $pfx.links | sed '/^$/d' | wc -l) -gt 0 && echo $pfx.links
 done | perl linkmerge.pl >$prefix.links
 link2iface $prefix.links
 }

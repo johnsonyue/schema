@@ -47,11 +47,11 @@ links=$1
 task=$2
 
 prefix=$(dirname $links)
-_task=_$(echo $task | sed 's/-/_/g')
+_task='_pchar'_$(echo $task | sed 's/-/_/g')
 
 links2dsv $links $task
 
-pass="nicetry"
+pass="root"
 host="10.10.11.140"
 manager_ip="10.10.222.135"
 expect -c " \

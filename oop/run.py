@@ -5,6 +5,7 @@ import subprocess
 import threading
 import json
 import datetime
+import pytz
 import time
 import sys
 import os
@@ -24,7 +25,7 @@ def usage():
   sys.stderr.write("python do.py <$conf_filename>\n")
 
 def current_time():
-  return datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+  return datetime.datetime.now(tz=pytz.timezone('Asia/Harbin')).strftime("%Y-%m-%d-%H-%M-%S")
 
 def get_celery_object():
   ## prepare task queue for remote tasks
@@ -245,10 +246,10 @@ class TaskConfigParser():
     # traceroute6 step 2
     s2 = Step(name="traceroute6", tasks=[])
     for monitor in monitor_list:
-      method = traceroute_method["method"]
-      attemps = traceroute_method["attemps"]
-      firstHop = traceroute_method["firstHop"]
-      pps = traceroute_method["pps"]
+      method = traceroute6_method["method"]
+      attemps = traceroute6_method["attemps"]
+      firstHop = traceroute6_method["firstHop"]
+      pps = traceroute6_method["pps"]
 
       t = Task(monitorId=monitor)
       if scheduling_strategy == "split":
@@ -279,7 +280,7 @@ class TaskConfigParser():
     t = Task()
     t.inputs = [ self.task_id+'.links' ]
     t.outputs = [ ]
-    t.command = "python import.py %s ${INPUTS[0]}" % (self.task_id)
+    t.command = "python import.py %s ${INPUTS[0]} 6" % (self.task_id)
     s4.tasks.append(t)
 
     task_graph.steps.append(s4)

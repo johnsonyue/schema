@@ -42,7 +42,8 @@ if __name__ == "__main__":
 
   task_id = sys.argv[1]
   links_filepath = sys.argv[2]
-  
+  af = 4 if len(sys.argv) < 4 else sys.argv[3]
+
   task_id = task_id.replace('-', '_')
   task_root = os.path.dirname( links_filepath )
   links_filename = os.path.basename( links_filepath )
@@ -65,7 +66,10 @@ if __name__ == "__main__":
 
     # Prepare msg
     msg = {}
-    msg['action'] = 'links'
+    if not af or af == '4':
+      msg['action'] = 'links'
+    else:
+      msg['action'] = 'ipv6_links'
     msg['task_id'] = task_id
     msg['url'] = 'http://%s:%s/%s' % (host_ip, free_port, links_filename)
 

@@ -37,11 +37,11 @@ nodes=$1
 task=$2
 
 prefix=$(dirname $nodes)
-_task=_$(echo $task | sed 's/-/_/g')
+_task='_pingscan'_$(echo $task | sed 's/-/_/g')
 
 nodes2dsv $nodes $task
 
-pass="nicetry"
+pass="root"
 host="10.10.11.140"
 expect -c " \
   set timeout -1
