@@ -46,7 +46,7 @@ def generate_task_info(parent):
     else:
       t.inputs = [ "%s;%s" % ( parent.task_id+'.ip_list', parent.task_id+'.ip_list' ) ]
     t.outputs = [ "%s;%s" % ( os.path.join(monitor, parent.task_id+'.mrinfo'), parent.task_id+'.mrinfo' ) ]
-    t.command = "cat ${INPUTS[0]} | xargs -n 1 -P 1 -I {} bash -c 'echo \"mrinfo to {}\"; mrinfo -r0 -t %s' >${OUTPUTS[0]}\n" % (timeout)
+    t.command = "cat ${INPUTS[0]} | xargs -n 1 -P 1 -I {} bash -c 'echo \"mrinfo to {}\" && mrinfo -r0 -t %s {}' >${OUTPUTS[0]}\n" % (timeout)
     s2.tasks.append(t)
 
   task_graph.steps.append(s2)

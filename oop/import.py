@@ -66,10 +66,10 @@ if __name__ == "__main__":
 
     # Prepare msg
     msg = {}
-    if not af or af == '4':
-      msg['action'] = 'links'
-    else:
+    if af == '6':
       msg['action'] = 'ipv6_links'
+    else:
+      msg['action'] = 'links'
     msg['task_id'] = task_id
     msg['url'] = 'http://%s:%s/%s' % (host_ip, free_port, links_filename)
 

@@ -298,9 +298,9 @@ class TaskRunner():
     self.steps = self.task_info["steps"]
 
     # monitor info
-    self.monitor_db = { e['Name']: e for e in monitor_info }
+    self.monitor_db = { e['name']: e for e in monitor_info }
     manager_info = self.monitor_db['Manager']
-    self.manager_root = manager_info['WorkDirectory']
+    self.manager_root = manager_info['directory']
     self.manager_ip = manager_info['IP_addr']
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
     self.is_manager_push = True
@@ -356,7 +356,7 @@ class TaskRunner():
   #    $step_name, $monitor_id: for whom and which step
   def _make_package_(self, monitor_id, inputs, outputs, command, step_name):
     ## get real path
-    local_inputs = map( lambda x: self.__real_paths__(x, monitor_id)[0], inputs )
+    local_inputs = map( lambda x: self.__real_paths__(x, monitor_id)[0], filter(lambda x: x!=';', inputs ) )
     remote_inputs = map( lambda x: self.__real_paths__(x, monitor_id)[1], inputs )
 
     remote_outputs = map( lambda x: self.__real_paths__(x, monitor_id)[1], outputs )
@@ -398,7 +398,8 @@ class TaskRunner():
 
     ## manager pull results.
     for i in range(len(remote_outputs)):
-      get = "./run.sh ssh -n %s get -l %s -r %s 1>&2" % ( monitor_id, local_outputs[i], remote_outputs[i])
+      # get = "./run.sh ssh -n %s get -l %s -r %s 1>&2" % ( monitor_id, local_outputs[i], remote_outputs[i])
+      get = './run.sh ssh sync -n %s get -l %s -r "%s" 1>&2' % ( monitor_id, local_outputs[i], remote_outputs[i])
       h = subprocess.Popen(get, shell=True)
       h.wait()
     return
@@ -411,7 +412,6 @@ class TaskRunner():
     while True:
       if r.ready():
         break
-      #sys.stderr.write('%s not ready\n' % (r.task_id))
       time.sleep(60)
     self.on_run_message(r.task_id)
 
@@ -490,7 +490,7 @@ class TaskRunner():
       outputs = task['outputs']
       command = task['command']
 
-      self.monitor_root[monitor_id] = self.monitor_db[monitor_id]['WorkDirectory']
+      self.monitor_root[monitor_id] = self.monitor_db[monitor_id]['directory']
 
       ## make monitor sub-directory
       monitor_dir = self.__real_paths__(monitor_id)[0]
@@ -564,7 +564,7 @@ if __name__ == "__main__":
   task_config_parser = TaskConfigParser(conf_filepath, 'info.schema')
   task_info = task_config_parser.generate_task_info()
   # monitor info
-  monitor_info = json.load( open('db.json') )
+  monitor_info = json.load( open('secrets.json') )['nodes']
   # run task
   task_runner = TaskRunner(task_info, monitor_info)
   task_runner.run()

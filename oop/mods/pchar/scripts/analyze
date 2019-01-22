@@ -18,12 +18,12 @@ def add():
       if "*" in k:
         continue
       if not k in d:
-        d[k] = (h['bw'], h['rtt'])
+        d[k] = [h['bw'], h['rtt']]
         continue
       if d[k] < h['bw']:
         d[k][0] = h['bw']
       if d[k] > h['rtt']:
-        d[k][0] = h['rtt']
+        d[k][1] = h['rtt']
       p = h
 
 hl = []; h = {}; dst = ''

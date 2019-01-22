@@ -12,6 +12,8 @@ import os
 import json
 import socket
 import struct
+from IPy import IP
+import random
 
 # utils
 def ip2int(ip):
@@ -33,19 +35,63 @@ def us( argv, prefix):
   for i in range( 0, n, g ):
     print int2ip( a + i + offset )
 
+def us_6( argv, prefix ):
+  density = argv[0]
+  offset = argv[1]
+  f = prefix.split('/')
+  m = min( 128, max(16,int(f[1])) ) # mask
+  g = 2**(128-max(density,m)) # granuality
+  a = IP(prefix)
+  i = offset
+  while( i < a.len() ):
+    print a[i]
+    i += g
+
 def urs( argv, prefix ):
-  return
+  density = argv[0]
+  offset = argv[1]
+  f = prefix.split('/')
+  m = min( 32, max(8,int(f[1])) ) # mask
+  g = 2**(32-max(density,m)) # granuality
+  n = 2**(32-m) # network size
+  a = ip2int(f[0])/n*n # start address
+  for i in range( 0, n, g ):
+    print int2ip( a + i -1 + random.randint( 0, g ) + offset )
+
+def urs_6( argv, prefix ):
+  density = argv[0]
+  offset = argv[1]
+  f = prefix.split('/')
+  m = min( 128, max(16,int(f[1])) ) # mask
+  g = 2**(128-max(density,m)) # granuality
+  a = IP(prefix)
+  i = offset
+  while( i < a.len() ):
+    print a[i + random.randint(0, g)]
+    i += g
 
 # main.
 cfg = json.load(open(sys.argv[1]))['user_config']
 
 method = cfg["targetSamplingMethod"]["detail"] if cfg.has_key("targetSamplingMethod") else None
+task_type = cfg["taskType"] if cfg.has_key("taskType") else None
+
 if method:
   name = method['name']
   if name == "uniform sampling":
     density = method['density']
     offset = method['offset']
-    proc = us; argv = ( density, offset )
+    if task_type == 'traceroute6':
+      proc = us_6; argv = ( density, offset )
+    else:
+      proc = us; argv = ( density, offset )
+  elif name == "uniform random sampling":
+    density = method['density']
+    offset = method['offset']
+    if task_type == 'traceroute6':
+      proc = urs_6; argv = ( density, offset )
+    else:
+      proc = urs; argv = ( density, offset )
 while True:
   try:
     l = raw_input().strip()
@@ -259,6 +305,8 @@ EOF
         ;;
       "setup")
         cat << "EOF" | sed "s|<\$dir>|$dir|"
+pip install lxml
+exit
 apt-get install -y build-essential nmap tmux
 # scamper
 cd <$dir>
@@ -311,6 +359,9 @@ pip install setuptools
 pip install redis
 pip install -U celery "celery[redis]"
 pip install mysqlclient pika sqlalchemy
+
+# download
+pip install lxml
 EOF
         ;;
       "start")
@@ -380,7 +431,8 @@ EOF
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
         expect -c " \
           set timeout -1
-          spawn rsync -avrt --copy-links -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+          spawn rsync -avt --copy-links --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+          log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
         "

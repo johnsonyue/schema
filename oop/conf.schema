@@ -24,6 +24,9 @@
         },
         {
           "$ref": "#/definitions/pchar"
+        },
+        {
+          "$ref": "#/definitions/parseconf"
         }
       ]
     }
@@ -514,6 +517,25 @@
               "$ref": "#/definitions/monitorList"
             }
           }
+        }
+      },
+      "required": [ "taskType" ]
+    },
+    "parseconf": {
+      "description": "parse router configuration file",
+      "title": "parse conf",
+      "type": "object",
+      "properties": {
+        "taskType": {
+          "title": "task type",
+          "type": "string",
+          "enum": [ "parseconf" ],
+          "options": { "hidden": true }
+        },
+        "confDir": {
+          "description": "directory containing the configuration file",
+          "title": "conf directory",
+          "type": "string"
         }
       },
       "required": [ "taskType" ]

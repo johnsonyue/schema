@@ -102,8 +102,7 @@
             },
             "monitorId": {
               "description": "Id of the monitor running the task",
-              "type": "string",
-              "pattern": "^([A-Z]|[a-z]){2,}[0-9]{2,}$"
+              "type": "string"
             },
             "inputs": {
               "description": "List of inputs",
