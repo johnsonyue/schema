@@ -390,7 +390,7 @@ EOF
     "
 
     # automatic scp, rsync
-    case $operation in 
+    case $operation in
       "put" | "get")
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
         from=$(test "$operation" == "put" && echo "$LOCAL" || echo "$ssh:$REMOTE")
@@ -431,10 +431,23 @@ EOF
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
         expect -c " \
           set timeout -1
-          spawn rsync -avt --copy-links --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
           log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
-          expect eof \
+          expect eof
+          foreach {pid spawnid os_error_flag value} [wait] break
+          exit \$value
+        "
+        exit $?
+        ;;
+      "clean")
+        test -z "$REMOTE" && usage
+        expect -c " \
+          set timeout -1
+          spawn bash -c \"ssh $ssh -p $port 'rm $REMOTE'\"
+          log_user 1
+          expect -re \".*password.*\" {send \"$pass\r\"}
+          expect eof
         "
         ;;
     esac

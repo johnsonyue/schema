@@ -173,6 +173,10 @@ class TaskConfigParser():
 
     task_graph.steps.append(s3)
 
+    do_dealias = self.conf["doDealias"]["detail"] if self.conf.has_key('doDealias') else True
+    if not do_dealias:
+      return json.loads(task_graph.serialize())
+
     # traceroute step 4
     s4 = Step(name="iffinder", tasks=[])
     for monitor in monitor_list:
@@ -400,8 +404,11 @@ class TaskRunner():
     for i in range(len(remote_outputs)):
       # get = "./run.sh ssh -n %s get -l %s -r %s 1>&2" % ( monitor_id, local_outputs[i], remote_outputs[i])
       get = './run.sh ssh sync -n %s get -l %s -r "%s" 1>&2' % ( monitor_id, local_outputs[i], remote_outputs[i])
-      h = subprocess.Popen(get, shell=True)
-      h.wait()
+      while True:
+        h = subprocess.Popen(get, shell=True)
+        h.wait()
+        if not h.returncode:
+          break
     return
 
   def task_thread_func(self, task, monitor_id, package_fileurl, remote_task_root, run_filename):
