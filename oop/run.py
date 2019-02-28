@@ -408,11 +408,12 @@ class TaskRunner():
     ## manager pull results.
     for i in range(len(remote_outputs)):
       # get = "./run.sh ssh -n %s get -l %s -r %s 1>&2" % ( monitor_id, local_outputs[i], remote_outputs[i])
-      get = './run.sh ssh sync -n %s get -l %s -r "%s" 1>&2' % ( monitor_id, local_outputs[i], remote_outputs[i])
+      get = './run.sh ssh sync -n %s -l %s -r "%s" 1>&2' % ( monitor_id, local_outputs[i], remote_outputs[i])
       while True:
         h = subprocess.Popen(get, shell=True)
         h.wait()
-        if not h.returncode:
+        sys.stderr.write("return code: %d, sync: %s\n" % (h.returncode, get))
+        if not h.returncode or h.returncode == 138:
           break
     return
 
@@ -516,16 +517,7 @@ class TaskRunner():
     ## case 1. manager push
     if self.is_manager_push:
       ## push packages
-      for task in monitor_tasks:
-        monitor_id = task['monitorId']
-        package_filepath = self.monitor_task[monitor_id]['packageInfo'][0]
-        remote_task_root = self.__real_paths__(';', monitor_id)[1]
-
-        mkdirs = "./run.sh ssh -n %s mkdirs -r %s 1>&2" % ( monitor_id, remote_task_root )
-        subprocess.Popen(mkdirs, shell=True).communicate()
-
-        put = "./run.sh ssh -n %s put -l %s -r %s 1>&2" % ( monitor_id, package_filepath, remote_task_root )
-        subprocess.Popen(put, shell=True).communicate()
+      self.push_packages(monitor_tasks)
       ## run tasks
       self.run_tasks(monitor_tasks)
 
@@ -549,6 +541,73 @@ class TaskRunner():
 
       step['endTime'] = current_time()
       print json.dumps(self.task_info)
+
+  def push_thread_func(self, i, task, result_list):
+    monitor_id = task['monitorId']
+    package_filepath = self.monitor_task[monitor_id]['packageInfo'][0]
+    remote_task_root = self.__real_paths__(';', monitor_id)[1]
+
+    mkdirs = "./run.sh ssh -n %s mkdirs -r %s 1>&2" % ( monitor_id, remote_task_root )
+    while True:
+      lock = threading.Lock()
+      lock.acquire()
+
+      h = subprocess.Popen(mkdirs, shell=True)
+      h.wait()
+
+      sys.stderr.write("return code: %d, mkdirs: %s\n" % (h.returncode, mkdirs))
+      lock.release()
+
+      if h.returncode == 138:
+        result_list[i] = False
+        return
+      elif h.returncode:
+        time.sleep(random.randint(1,10))
+        sys.stderr.write("reopen %s\n" % (mkdirs))
+        continue
+
+      break
+
+    put = "./run.sh ssh -n %s push -l %s -r %s 1>&2" % ( monitor_id, package_filepath, remote_task_root )
+    while True:
+      lock = threading.Lock()
+      lock.acquire()
+
+      h = subprocess.Popen(put, shell=True)
+      h.wait()
+
+      sys.stderr.write("return code: %d, put: %s\n" % (h.returncode, put))
+      lock.release()
+
+      if h.returncode == 138:
+        result_list[i] = False
+        return
+      elif h.returncode:
+        time.sleep(random.randint(1,10))
+        sys.stderr.write("reopen %s\n" % (put))
+        continue
+
+      break
+
+    result_list[i] = True
+
+  def push_packages(self, monitor_tasks, MAX_CONCURRENCY=20):
+    thread_list = []; result_list = []
+    for i,task in enumerate(monitor_tasks):
+      t = threading.Thread( target=self.push_thread_func, args=(i,task,result_list,) )
+      thread_list.append(t); result_list.append(False)
+
+    cur = 0
+    while True:
+      if cur >= len(thread_list):
+        break
+      if len(filter(lambda t: t.isAlive(), thread_list)) < MAX_CONCURRENCY:
+        sys.stderr.write(''.join(map(lambda x: str(x), map(lambda (i, t): 1 if t.isAlive() else (2 if i<cur else 0), enumerate(thread_list))))+'\n')
+        thread_list[cur].start()
+        cur += 1
+
+    [ t.join() for t in thread_list ]
+    return filter(lambda (i,x): result_list[i], enumerate(monitor_tasks))
 
   def run(self):
     ## make task root directory

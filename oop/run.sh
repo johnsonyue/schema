@@ -412,22 +412,21 @@ EOF
         cat << "EOF" | sed "s|<\$dir>|$dir|"
 apt-get update
 apt-get install -y build-essential nmap tmux
+
 # scamper
 cd <$dir>
-wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz
+# wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz -O scamper-cvs-20180504.tar.gz
 
-tar zxf scamper-cvs-20180504.tar.gz
+# tar zxf scamper-cvs-20180504.tar.gz
 cd scamper-cvs-20180504/
-sed -i 's/snprintf(header, sizeof(header), "traceroute from %s to %s", src, dst);/snprintf(header, sizeof(header), "traceroute from %s to %s %ld", src, dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
-sed -i 's/snprintf(header, sizeof(header), "traceroute to %s", dst);/snprintf(header, sizeof(header), "traceroute to %s %ld", dst, trace->start.tv_sec);/' scamper/trace/scamper_trace_text.c
 
-./configure
-make && make install
+./configure && make
+make install
 cd ../
 
 # iffinder
 cd <$dir>
-wget https://www.caida.org/tools/measurement/iffinder/download/iffinder-1.38.tar.gz
+wget https://www.caida.org/tools/measurement/iffinder/download/iffinder-1.38.tar.gz -O iffinder-1.38.tar.gz
 
 tar zxf iffinder-1.38.tar.gz
 cd iffinder-1.38/
@@ -452,7 +451,7 @@ cd ../
 
 # pchar
 cd <$dir>
-wget http://www.kitchenlab.org/www/bmah/Software/pchar/pchar-1.5.tar.gz && tar zxf pchar-1.5.tar.gz
+wget http://www.kitchenlab.org/www/bmah/Software/pchar/pchar-1.5.tar.gz -O pchar-1.5.tar.gz && tar zxf pchar-1.5.tar.gz
 cd pchar-1.5/
 ./configure && make && make install
 cd ../
@@ -481,88 +480,145 @@ EOF
         ;;
       "test")
         cat << "EOF"
-python -c "import lxml"
+which scamper
 EOF
         ;;
     esac \
     | \
     # automatic ssh
-    ( test -z "$(echo $pass | grep "KeyPair")" \
-      && expect -c " \
-      set timeout 30
-      spawn bash -c \"ssh $ssh -p $port 'bash -s'\"
-      expect -re \".*password.*\" {send \"$pass\r\"}
-      while {[gets stdin line] != -1} {
-        send \"\$line\r\"
-      }
-      send \004
-      expect eof \
-      " \
-      || ssh $ssh -i $priv_key -p $port 'sudo bash -s' \
-      )
+    if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+      expect -c " \
+        set timeout 20
+        spawn bash -c \"ssh $ssh -p $port 'bash -s'\"
+        expect {
+          timeout {exit 138}
+          -re \".*password.*\"
+        }
+        send \"$pass\r\"
+        set timeout -1
+        while {[gets stdin line] != -1} {
+          send \"\$line\r\"
+        }
+        send \004
+        expect eof \
+      "
+    else
+      echo "ssh $ssh -i $priv_key -p $port 'sudo bash -s'" >&2
+      ssh $ssh -i $priv_key -p $port 'sudo bash -s'
+    fi
 
     # automatic scp, rsync
     case $operation in
-      "put" | "get")
+      "push" | "pull")
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
-        from=$(test "$operation" == "put" && echo "$LOCAL" || echo "$ssh:$REMOTE")
-        to=$(test "$operation" == "put" && echo "$ssh:$REMOTE" || echo "$LOCAL")
-        ( test ! "$pass" == "AWS-KeyPair" \
-        && expect -c " \
-          set timeout -1
-          spawn scp -P $port $from $to
-          log_user 0
-          expect -re \".*password.*\" {send \"$pass\r\"}
-          expect eof \
-        " \
-        || cat $from | ssh $ssh -i $priv_key -p $port "sudo bash -c \"cat > $(echo $to | rev | cut -d':' -f1 | rev)\"" \
-        )
-        ;;
-      "mkdirs")
-        test -z "$REMOTE" && usage
-        ( test ! "$pass" == "AWS-KeyPair" \
-        && expect -c " \
-          set timeout -1
-          spawn bash -c \"ssh -o 'StrictHostKeyChecking no' $ssh -p $port 'mkdir -p $REMOTE'\"
-          log_user 0
-          expect -re \".*password.*\" {send \"$pass\r\"}
-          expect eof \
-        " \
-        || ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo mkdir -p $REMOTE" \
-        )
-        ;;
-      "cat")
-        test -z "$REMOTE" && usage
-        ( test ! "$pass" == "AWS-KeyPair" \
-        && expect -c " \
-          set timeout -1
-          spawn bash -c \"ssh $ssh -p $port 'cat >$REMOTE'\"
-          expect -re \".*password.*\" {send \"$pass\r\"}
-          log_user 0
-          while {[gets stdin line] != -1} {
-            send \"\$line\r\"
+
+        from=$(test "$operation" == "push" && echo "$LOCAL" || echo "$ssh:$REMOTE")
+        to=$(test "$operation" == "push" && echo "$ssh:$REMOTE" || echo "$LOCAL")
+
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+        expect -c " \
+          set timeout 20
+          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $from $to
+          expect {
+            timeout {exit 138}
+            -re \".*password.*\"
           }
-          send \004
-          expect eof \
-        " \
-        || ssh $ssh -p $port -i $priv_key "sudo bash -c \"cat >$REMOTE\"" \
-        )
-        ;;
-      "sync")
-        test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
-        ( test ! "$pass" == "AWS-KeyPair" \
-        && expect -c " \
+          send \"$pass\r\"
           set timeout -1
-          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
-          log_user 0
-          expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof
           foreach {pid spawnid os_error_flag value} [wait] break
           exit \$value
-        " \
-        || rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL 2>/dev/null \
-        )
-        exit $?
+          "
+        else
+          rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
+        fi
+        ;;
+      "put" | "get")
+        test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
+
+        from=$(test "$operation" == "put" && echo "$LOCAL" || echo "$ssh:$REMOTE")
+        to=$(test "$operation" == "put" && echo "$ssh:$REMOTE" || echo "$LOCAL")
+
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+        expect -c " \
+          set timeout 20
+          spawn scp -P $port $from $to
+          expect {
+            timeout {exit 138}
+            -re \".*password.*\"
+          }
+          send \"$pass\r\"
+          set timeout -1
+          expect eof
+          foreach {pid spawnid os_error_flag value} [wait] break
+          exit \$value
+          "
+        else
+          if [ "$operation" == "put" ]; then
+            cat $LOCAL | ssh $ssh -i $priv_key -p $port "sudo bash -c \"to=$REMOTE; test -d \\\$to && cat > \\\$to/$(basename $LOCAL) || cat > \\\$to\""
+          else
+            ssh $ssh -i $priv_key -p $port "sudo bash -c \"cat $REMOTE\"" >$LOCAL
+          fi
+        fi
+        ;;
+      "mkdirs")
+        test -z "$REMOTE" && usage
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout 20
+            spawn bash -c \"ssh -o 'StrictHostKeyChecking no' $ssh -p $port 'mkdir -p $REMOTE'\"
+            expect {
+              timeout {exit 138}
+              -re \".*password.*\"
+            }
+            send \"$pass\r\"
+            set timeout -1
+            expect eof
+            foreach {pid spawnid os_error_flag value} [wait] break
+            exit \$value
+          "
+        else
+          ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo mkdir -p $REMOTE"
+        fi
+        ;;
+      "cat")
+        test -z "$REMOTE" && usage
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout 20
+            spawn bash -c \"ssh $ssh -p $port 'cat >$REMOTE'\"
+            expect {
+              timeout {exit 138}
+              -re \".*password.*\"
+            }
+            send \"$pass\r\"
+            set timeout -1
+            log_user 0
+            while {[gets stdin line] != -1} {
+              send \"\$line\r\"
+            }
+            send \004
+            expect eof \
+          "
+        else
+          ssh $ssh -p $port -i $priv_key "sudo bash -c \"cat >$REMOTE\""
+        fi
+        ;;
+      "sync")
+        test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout -1
+            spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+            log_user 0
+            expect -re \".*password.*\" {send \"$pass\r\"}
+            expect eof
+            foreach {pid spawnid os_error_flag value} [wait] break
+            exit \$value
+          "
+        else
+           rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL #2>/dev/null
+        fi
         ;;
       "clean")
         test -z "$REMOTE" && usage
