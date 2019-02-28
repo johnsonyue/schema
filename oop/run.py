@@ -135,6 +135,11 @@ class TaskConfigParser():
       t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
       t.command = "cat ${INPUTS[0]} | ./run.sh target -c ${INPUTS[1]} >${OUTPUTS[0]};\n"
       t.command += "./run.sh split -c ${INPUTS[1]} ${OUTPUTS[0]}"
+    elif scheduling_strategy == "spread":
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
+      t.command = "cp ${INPUTS[0]} ${OUTPUTS[0]};\n"
+      t.command += "./run.sh spread -c ${INPUTS[1]} ${OUTPUTS[0]}"
     else:
       t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
       t.outputs = [ self.task_id+".ip_list" ]

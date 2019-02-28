@@ -115,10 +115,6 @@ EOF
 
 
 splt(){
-  # methods:
-  #   Uniform Sampling
-  #   Uniform Random Sampling
-
   cfg=$1
   target_filepath=$2
 
@@ -133,6 +129,109 @@ splt(){
     mv $l $target_filedir/${ml[i]}/$target_filename
     ((i++))
   done
+}
+
+gen(){
+g=$1
+gi=$2
+gs=$3
+python <(
+cat << "EOF"
+import sys
+import json
+import socket
+import struct
+
+def ip_int2str(i):
+  return socket.inet_ntoa(struct.pack('!L',i)) 
+
+offset = 1
+
+o=json.loads(sys.stdin.read())
+g=int(sys.argv[1])
+if len(sys.argv) < 4:
+  gi=1; gs=1
+else:
+  gi=int(sys.argv[2])
+  gs=int(sys.argv[3])
+
+interval = 2**(32-g)/gs
+for k,v in o.items():
+  for vv in v:
+    for i in range( vv['ip_from']+gi*interval+offset, vv['ip_to']+1, 2**(32-g) ):
+      print ip_int2str(i)
+    if vv['ip_from'] == vv['ip_to']:
+      print ip_int2str(vv['ip_from'])
+EOF
+) $g $gi $gs # granaluarity, group index, group size
+}
+
+
+split_json(){
+json=$1
+prefix=$2
+number=$3
+
+cat $json | python <(
+cat << "EOF"
+import json
+import sys
+
+if len(sys.argv) < 3:
+  exit()
+
+prefix = sys.argv[1]
+number = int(sys.argv[2])
+
+o = json.load(sys.stdin)
+o = o['US']
+interval = len(o)/number + 1
+c = 0
+for i in range(0, len(o), interval):
+  json.dump( {"US": o[i:i+interval]}, open('%s%d'%(prefix, c), 'wb'), indent=2 )
+  c+=1
+EOF
+) $prefix $number
+}
+
+# first divide prefix list into 10 groups,
+# then for each group sample targets for each monitor,
+# monitors in same group use different sampling offset
+spread(){
+  cfg=$1
+  target_filepath=$2
+
+  target_filedir=$(dirname $target_filepath); target_filename=$(basename $target_filepath)
+  ml=($(python -c "import json; print ' '.join(json.load(open('$cfg'))['user_config']['monitorList']['detail']);"))
+  mn=${#ml[@]}
+  gn=$(test $mn -ge 10 && echo 10 || echo $mn) # group number
+  gs=$(echo "$mn/$gn" | bc) # group size
+  r=$(echo "$mn%$gn" | bc) # remainder
+
+  # size list
+  sl=($(python -c "l=[str($gs+1) if i < $r else str($gs) for i in range($gn)]; print ' '.join(l)"))
+  # threshold list
+  tl=($(echo ${sl[*]} | python -c "l=map(lambda x: int(x), raw_input().strip('\n').split()); tl = reduce(lambda (a,s), b: (a+[s+b], s+b), l, ([], 0)); print ' '.join(map(lambda x: str(x), tl[0]))"))
+  # find group
+  fg(){
+    for i in ${!tl[@]}; do
+      test $1 -lt ${tl[$i]} && echo $((i)) && break
+    done
+  }
+
+  export -f gen
+
+  split_json $target_filepath $target_filepath. $gn
+  fl=($(ls $target_filepath.*));
+  for i in $(seq 0 $((mn-1))); do
+    mkdir -p $target_filedir/${ml[i]}
+    gi=$(fg $i); f=${fl[$gi]} # group index and corresponding file
+    gs=${sl[$gi]} # group size
+    lb=$(test $gi -gt 0 && echo ${tl[gi-1]} || echo 0) # group lower bound
+    j=$((i-lb)) # offset for specific monitor inside group
+    echo "cat $f | gen 24 $j $gs >$target_filedir/${ml[i]}/$target_filename"
+    # cat $f | gen 25 $j $gs >$target_filedir/${ml[i]}/$target_filename
+  done | xargs -n 1 -P 20 -I {} bash -c "echo '{}'; {}"
 }
 
 creds(){
@@ -228,6 +327,7 @@ while test $# -gt 0; do
 done
 eval set -- "$args"
 
+priv_key="/home/john/aws/AWS-KeyPair.pem"
 # parse positional arguments.
 cmd=$1
 case $cmd in
@@ -238,6 +338,10 @@ case $cmd in
   "split")
     test $# -lt 2 && usage
     splt "$CONFIG" $2
+    ;;
+  "spread")
+    test $# -lt 2 && usage
+    spread "$CONFIG" $2
     ;;
   "geo")
     perl geo-labeling.pl ../web/import/GeoLite2-Country-Blocks-IPv4.csv ../web/import/GeoLite2-Country-Locations-en.csv
@@ -263,6 +367,7 @@ case $cmd in
     # inline scripts.
     ( test "$operation" == "setup" || \
       test "$operation" == "setup-manager" || \
+      test "$operation" == "test" || \
       test "$operation" == "stop" || \
       test "$operation" == "start" ) && \
     case $operation in
@@ -305,8 +410,7 @@ EOF
         ;;
       "setup")
         cat << "EOF" | sed "s|<\$dir>|$dir|"
-pip install lxml
-exit
+apt-get update
 apt-get install -y build-essential nmap tmux
 # scamper
 cd <$dir>
@@ -375,11 +479,17 @@ EOF
 tmux kill-window -t task
 EOF
         ;;
+      "test")
+        cat << "EOF"
+python -c "import lxml"
+EOF
+        ;;
     esac \
     | \
     # automatic ssh
-    expect -c " \
-      set timeout -1
+    ( test -z "$(echo $pass | grep "KeyPair")" \
+      && expect -c " \
+      set timeout 30
       spawn bash -c \"ssh $ssh -p $port 'bash -s'\"
       expect -re \".*password.*\" {send \"$pass\r\"}
       while {[gets stdin line] != -1} {
@@ -387,7 +497,9 @@ EOF
       }
       send \004
       expect eof \
-    "
+      " \
+      || ssh $ssh -i $priv_key -p $port 'sudo bash -s' \
+      )
 
     # automatic scp, rsync
     case $operation in
@@ -395,27 +507,34 @@ EOF
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
         from=$(test "$operation" == "put" && echo "$LOCAL" || echo "$ssh:$REMOTE")
         to=$(test "$operation" == "put" && echo "$ssh:$REMOTE" || echo "$LOCAL")
-        expect -c " \
+        ( test ! "$pass" == "AWS-KeyPair" \
+        && expect -c " \
           set timeout -1
           spawn scp -P $port $from $to
           log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
-        "
+        " \
+        || cat $from | ssh $ssh -i $priv_key -p $port "sudo bash -c \"cat > $(echo $to | rev | cut -d':' -f1 | rev)\"" \
+        )
         ;;
       "mkdirs")
         test -z "$REMOTE" && usage
-        expect -c " \
+        ( test ! "$pass" == "AWS-KeyPair" \
+        && expect -c " \
           set timeout -1
           spawn bash -c \"ssh -o 'StrictHostKeyChecking no' $ssh -p $port 'mkdir -p $REMOTE'\"
           log_user 0
           expect -re \".*password.*\" {send \"$pass\r\"}
           expect eof \
-        "
+        " \
+        || ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo mkdir -p $REMOTE" \
+        )
         ;;
       "cat")
         test -z "$REMOTE" && usage
-        expect -c " \
+        ( test ! "$pass" == "AWS-KeyPair" \
+        && expect -c " \
           set timeout -1
           spawn bash -c \"ssh $ssh -p $port 'cat >$REMOTE'\"
           expect -re \".*password.*\" {send \"$pass\r\"}
@@ -425,11 +544,14 @@ EOF
           }
           send \004
           expect eof \
-        "
+        " \
+        || ssh $ssh -p $port -i $priv_key "sudo bash -c \"cat >$REMOTE\"" \
+        )
         ;;
       "sync")
         test ! -z "$LOCAL" && test ! -z "$REMOTE" || usage
-        expect -c " \
+        ( test ! "$pass" == "AWS-KeyPair" \
+        && expect -c " \
           set timeout -1
           spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
           log_user 0
@@ -437,7 +559,9 @@ EOF
           expect eof
           foreach {pid spawnid os_error_flag value} [wait] break
           exit \$value
-        "
+        " \
+        || rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL 2>/dev/null \
+        )
         exit $?
         ;;
       "clean")
