@@ -4,6 +4,7 @@ import os
 import json
 
 import time
+import random
 
 from celery import Celery
 from celery import Task
@@ -42,5 +43,13 @@ def run(package_fileurl, remote_task_root, run_filename):
 
   p = subprocess.Popen( 'bash %s' % (os.path.join(remote_task_root, run_filename)), shell=True )
   p.wait()
-  
+
+  while True:
+    try:
+      run.update_state(state='SUCCESS')
+    except Exception, e:
+      time.sleep(random.randint(5,20))
+      continue
+    break
+
   return p.returncode
