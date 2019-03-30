@@ -44,7 +44,7 @@ class MyTCPHandler(SocketServer.BaseRequestHandler):
         sql = "UPDATE celery_task_list SET task_info=%s WHERE task_id=%s"
         cur.execute(sql, (escaped, task_id ))
       except mdb.Error, e:
-        print e
+        print 'error', self.server.task_stdout[task_id]
         pass
       finally:
         if con:
