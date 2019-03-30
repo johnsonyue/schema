@@ -163,7 +163,7 @@ for k,v in o.items():
     if vv['ip_from'] == vv['ip_to']:
       print ip_int2str(vv['ip_from'])
 EOF
-) $g $gi $gs # granaluarity, group index, group size
+) $g $gi $gs # granularity, group index, group size
 }
 
 
@@ -232,6 +232,51 @@ spread(){
     echo "cat $f | gen 24 $j $gs >$target_filedir/${ml[i]}/$target_filename"
     # cat $f | gen 25 $j $gs >$target_filedir/${ml[i]}/$target_filename
   done | xargs -n 1 -P 20 -I {} bash -c "echo '{}'; {}"
+}
+
+offset(){
+  cfg=$1
+  target_filepath=$2
+
+  target_filedir=$(dirname $target_filepath); target_filename=$(basename $target_filepath)
+  ml=($(python -c "import json; print ' '.join(json.load(open('$cfg'))['user_config']['monitorList']['detail']);"))
+  mn=${#ml[@]}
+
+  # for each /24 netrange, sample $mn IPs and add to each monitor
+  sample(){
+  python <(
+    cat << "EOF"
+import os
+import sys
+import json
+import random
+import socket
+import struct
+
+def ip_int2str(i):
+  return socket.inet_ntoa(struct.pack('!L',i)) 
+
+offset = int(sys.argv[1]) + 150
+o = json.load(sys.stdin)
+g = 24
+
+def sample(ip_from, ip_to, offset):
+  rl = ip_to - ip_from + 1 # range length
+  print ip_int2str( ip_from + offset%rl )
+
+for k,v in o.items():
+  for vv in v:
+    for i in range( vv['ip_from'], vv['ip_to']+1, 2**(32-g) ):
+      sample( i, min(vv['ip_to'], i+2**(32-g)), offset )
+EOF
+  ) $1
+  }
+
+  export -f sample
+
+  for i in $(seq 0 $((mn-1))); do
+    echo $i' '${ml[i]}
+  done | xargs -n 1 -P 20 -I {} bash -c "read off m < <(echo {}); mkdir -p $target_filedir/\$m; cat $target_filepath | sample \$off >$target_filedir/\$m/$target_filename"
 }
 
 creds(){
@@ -343,6 +388,10 @@ case $cmd in
     test $# -lt 2 && usage
     spread "$CONFIG" $2
     ;;
+  "offset")
+    test $# -lt 2 && usage
+    offset "$CONFIG" $2
+    ;;
   "geo")
     perl geo-labeling.pl ../web/import/GeoLite2-Country-Blocks-IPv4.csv ../web/import/GeoLite2-Country-Locations-en.csv
     ;;
@@ -406,25 +455,30 @@ sed -i 's/snprintf(header, sizeof(header), "traceroute to %s", dst);/snprintf(he
 ./configure
 make && make install
 cd ../
+
+apt-get install -y nocache
 EOF
         ;;
       "setup")
         cat << "EOF" | sed "s|<\$dir>|$dir|"
 apt-get update
-apt-get install -y build-essential nmap tmux
+apt-get install -y build-essential byacc nmap tmux
 
 # scamper
+if [ -z "$(which scamper)" ]; then
 cd <$dir>
-# wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz -O scamper-cvs-20180504.tar.gz
+wget https://www.caida.org/tools/measurement/scamper/code/scamper-cvs-20180504.tar.gz -O scamper-cvs-20180504.tar.gz
 
-# tar zxf scamper-cvs-20180504.tar.gz
+tar zxf scamper-cvs-20180504.tar.gz
 cd scamper-cvs-20180504/
 
 ./configure && make
 make install
 cd ../
+fi
 
 # iffinder
+if [ -z "$(which iffinder)" ]; then
 cd <$dir>
 wget https://www.caida.org/tools/measurement/iffinder/download/iffinder-1.38.tar.gz -O iffinder-1.38.tar.gz
 
@@ -433,28 +487,73 @@ cd iffinder-1.38/
 ./configure && make
 ln -s $(realpath miniffinder) /usr/bin/iffinder
 cd ../
+fi
 
 # sc_tnt
+if [ -z "$(which sc_tnt)" ]; then
 cd <$dir>
+# install m4
+type m4 >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  wget http://ftp.gnu.org/gnu/m4/m4-1.4.17.tar.gz -O m4-1.4.17.tar.gz
+  tar -zxvf m4-1.4.17.tar.gz
+  cd m4-1.4.17
+  ./configure --prefix=/usr/local
+  make && make install
+  cd ..
+fi
+# install autoconf
+type autoconf >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  wget http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz -O autoconf-2.69.tar.gz
+  tar -zxvf autoconf-2.69.tar.gz
+  rm autoconf-2.69.tar.gz
+  cd autoconf-2.69
+  ./configure --prefix=/usr/local
+  make && make install
+  cd ..
+fi
+# install automake
+type automake >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+  wget http://ftp.gnu.org/gnu/automake/automake-1.16.tar.gz -O automake-1.16.tar.gz
+  tar -zxvf automake-1.16.tar.gz
+  cd automake-1.16
+  ./configure --prefix=/usr/local
+  make && make install
+  mkdir -p /opt
+  # aclocal
+  export PATH=/opt/aclocal-1.16/bin:$PATH
+  cd ..
+fi
+
+test -d TNT && rm -r TNT
 git clone --depth=1 https://github.com/YvesVanaubel/TNT
 cd TNT/TNT/scamper-tnt-cvs-20180523a/
+touch NEWS README AUTHORS ChangeLog
 ./configure && make
 make install
 cd ../../../
+fi
 
 # mrinfo
+if [ -z "$(which mrinfo)" ]; then
 cd <$dir>
+test -d mrouted && rm -r mrouted
 git clone --depth=1 https://github.com/troglobit/mrouted
 cd mrouted/
 ./autogen.sh && ./configure && make && make install
 cd ../
+fi
 
 # pchar
+if [ -z "$(which pchar)" ]; then
 cd <$dir>
 wget http://www.kitchenlab.org/www/bmah/Software/pchar/pchar-1.5.tar.gz -O pchar-1.5.tar.gz && tar zxf pchar-1.5.tar.gz
 cd pchar-1.5/
 ./configure && make && make install
 cd ../
+fi
 
 # celery, sql
 apt-get install -y python-pip rabbitmq-server redis-server python-dev libmysqlclient-dev
@@ -468,9 +567,9 @@ pip install lxml
 EOF
         ;;
       "start")
-        cat << "EOF" | sed "s|<\$dir>|$dir|" | sed "s/<\$node_name>/$node_name/"
+        cat << "EOF" | sed "s|<\$dir>|$dir|g" | sed "s/<\$node_name>/$node_name/g"
 tmux new -s 'task' -d \; \
-  send-keys "cd <$dir>; celery worker -A tasks -l info -c 20 -Q vp.<$node_name>.run --without-gossip --without-mingle --pool=solo --purge" C-m;
+  send-keys "cd <$dir>; celery worker -A tasks -l info -c 20 -Q vp.<$node_name>.run -n <$node_name> --without-gossip --without-mingle --pool=solo" C-m;
 EOF
         ;;
       "stop")
@@ -494,17 +593,22 @@ EOF
           timeout {exit 138}
           -re \".*password.*\"
         }
-        send \"$pass\r\"
+        send -- \"$pass\r\"
         set timeout -1
         while {[gets stdin line] != -1} {
           send \"\$line\r\"
         }
         send \004
-        expect eof \
+        expect {
+          -re \".*denied.*\" {exit 139}
+          eof
+        }
       "
+      exit $?
     else
       echo "ssh $ssh -i $priv_key -p $port 'sudo bash -s'" >&2
       ssh $ssh -i $priv_key -p $port 'sudo bash -s'
+      exit $?
     fi
 
     # automatic scp, rsync
@@ -518,19 +622,19 @@ EOF
         if [ -z "$(echo $pass | grep "KeyPair")" ]; then
         expect -c " \
           set timeout 20
-          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $from $to
+          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" --rsync-path \"sudo rsync\" $from $to
           expect {
             timeout {exit 138}
             -re \".*password.*\"
           }
-          send \"$pass\r\"
+          send -- \"$pass\r\"
           set timeout -1
           expect eof
           foreach {pid spawnid os_error_flag value} [wait] break
           exit \$value
           "
         else
-          rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
+          rsync -avt --rsync-path="sudo rsync" --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
         fi
         ;;
       "put" | "get")
@@ -547,7 +651,7 @@ EOF
             timeout {exit 138}
             -re \".*password.*\"
           }
-          send \"$pass\r\"
+          send -- \"$pass\r\"
           set timeout -1
           expect eof
           foreach {pid spawnid os_error_flag value} [wait] break
@@ -571,7 +675,7 @@ EOF
               timeout {exit 138}
               -re \".*password.*\"
             }
-            send \"$pass\r\"
+            send -- \"$pass\r\"
             set timeout -1
             expect eof
             foreach {pid spawnid os_error_flag value} [wait] break
@@ -591,7 +695,7 @@ EOF
               timeout {exit 138}
               -re \".*password.*\"
             }
-            send \"$pass\r\"
+            send -- \"$pass\r\"
             set timeout -1
             log_user 0
             while {[gets stdin line] != -1} {
@@ -610,8 +714,8 @@ EOF
           expect -c " \
             set timeout -1
             spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
-            log_user 0
-            expect -re \".*password.*\" {send \"$pass\r\"}
+            log_user 1
+            expect -re \".*password.*\" {send -- \"$pass\r\"}
             expect eof
             foreach {pid spawnid os_error_flag value} [wait] break
             exit \$value
@@ -622,13 +726,17 @@ EOF
         ;;
       "clean")
         test -z "$REMOTE" && usage
-        expect -c " \
-          set timeout -1
-          spawn bash -c \"ssh $ssh -p $port 'rm $REMOTE'\"
-          log_user 1
-          expect -re \".*password.*\" {send \"$pass\r\"}
-          expect eof
-        "
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout -1
+            spawn bash -c \"ssh $ssh -p $port 'rm $REMOTE'\"
+            log_user 1
+            expect -re \".*password.*\" {send -- \"$pass\r\"}
+            expect eof
+          "
+        else
+          ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo rm $REMOTE"
+        fi
         ;;
     esac
     ;;

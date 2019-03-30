@@ -78,12 +78,17 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 class TaskConfigParser():
-  def __init__(self, conf_filepath, schema_filepath):
+  def __init__(self, conf_filepath, schema_filepath, monitor_info):
     self.conf_filepath = conf_filepath
     self.conf_filename = os.path.basename(conf_filepath)
     self.conf = json.load( open(conf_filepath) )['user_config']
     self.schema = json.load( open(schema_filepath) )
     self.task_id = os.path.basename(conf_filepath).rsplit('.', 1)[0]
+
+    # remove non-existent monitors
+    ml = [ e['name'] for e in monitor_info ]
+    if self.conf.has_key('monitorList'):
+      self.conf["monitorList"]["detail"] = filter(lambda m: m in ml, self.conf["monitorList"]["detail"])
 
   def __get_class_from_schema__(self):
     # schema namespace
@@ -140,6 +145,11 @@ class TaskConfigParser():
       t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
       t.command = "cp ${INPUTS[0]} ${OUTPUTS[0]};\n"
       t.command += "./run.sh spread -c ${INPUTS[1]} ${OUTPUTS[0]}"
+    elif scheduling_strategy == "offset":
+      t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
+      t.outputs = [ self.task_id+".ip_list", os.path.join("*", self.task_id+".ip_list") ]
+      t.command = "cp ${INPUTS[0]} ${OUTPUTS[0]};\n"
+      t.command += "./run.sh offset -c ${INPUTS[1]} ${OUTPUTS[0]}"
     else:
       t.inputs = [ target_filepath, os.path.realpath(self.conf_filepath) ]
       t.outputs = [ self.task_id+".ip_list" ]
@@ -157,7 +167,7 @@ class TaskConfigParser():
       pps = traceroute_method["pps"]
 
       t = Task(monitorId=monitor)
-      if scheduling_strategy == "split":
+      if scheduling_strategy in [ "split", "spread", "offset" ]:
         t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
       else:
         t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
@@ -314,6 +324,9 @@ class TaskRunner():
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
     self.is_manager_push = True
 
+    self.auto_sync_interval = 60*60*2
+    self.thread_limiter = threading.Semaphore(10)
+
     # celery
     self.celery = get_celery_object()
 
@@ -395,7 +408,8 @@ class TaskRunner():
     subprocess.Popen(tar, shell=True).communicate()
     return package_filepath, run_filename
 
-  def on_run_message(self, taskid):
+  def on_run_message(self, taskid, retry=True):
+    self.thread_limiter.acquire()
     monitor_id = self.taskid_to_monitor[taskid]
     monitor_root = self.monitor_root[monitor_id]
     monitor_task = self.monitor_task[monitor_id]
@@ -413,27 +427,64 @@ class TaskRunner():
         h = subprocess.Popen(get, shell=True)
         h.wait()
         sys.stderr.write("return code: %d, sync: %s\n" % (h.returncode, get))
-        if not h.returncode or h.returncode == 138:
+        if not retry or not h.returncode or h.returncode == 23 or h.returncode == 138:
           break
+
+    self.thread_limiter.release()
     return
 
-  def task_thread_func(self, task, monitor_id, package_fileurl, remote_task_root, run_filename):
+  def touch_celery_worker(self, monitor_id):
+    if self.celery.control.ping( destination = [ 'celery@%s' % (monitor_id) ], timeout = 10 ):
+      return True
+    # start the worker if no pong received
+    start = "./run.sh ssh -n %s start 1>&2" % ( monitor_id )
+    while True:
+      lock = threading.Lock()
+      lock.acquire()
+
+      h = subprocess.Popen(start, shell=True)
+      h.wait()
+
+      sys.stderr.write("return code: %d, start: %s\n" % (h.returncode, start))
+      lock.release()
+
+      if h.returncode == 138:
+        return False
+      return True
+
+  def task_thread_func(self, i, task, result_list, monitor_id, package_fileurl, remote_task_root, run_filename):
     r = self.celery.send_task( 'tasks.run', [package_fileurl, remote_task_root, run_filename], queue="vp.%s.run" % (monitor_id) )
     task['taskId'] = r.task_id
     self.taskid_to_monitor[r.task_id] = monitor_id;
     #r.get( callback=self.on_run_message, propagate=False )
+    start_time = time.time()
     while True:
+      lock = threading.Lock()
+      lock.acquire()
       if r.ready():
+        result_list[i] = 1
+        sys.stderr.write( ''.join(map(lambda x: str(x), result_list)) + ": %s ready\n" % (monitor_id) )
         break
+      sys.stderr.write( ''.join(map(lambda x: str(x), result_list)) + ": %s NOT ready\n" % (monitor_id) )
+      lock.release()
+
+      if self.auto_sync_interval and time.time() - start_time >= self.auto_sync_interval:
+        start_time = time.time()
+        self.on_run_message(r.task_id, retry=False)
+
       time.sleep(60)
+
     self.on_run_message(r.task_id)
 
+    lock = threading.Lock()
+    lock.acquire()
     task['endTime'] = current_time()
     print json.dumps(self.task_info)
+    lock.release()
 
   def run_tasks(self, tasks):
-    thread_list = []
-    for task in tasks:
+    thread_list = []; result_list = [ 0 for t in tasks ]
+    for i,task in enumerate(tasks):
       task['startTime'] = current_time()
       print json.dumps(self.task_info)
 
@@ -451,7 +502,7 @@ class TaskRunner():
       # where to unpack
       remote_task_root = self.__real_paths__(';', monitor_id)[1]
 
-      t = threading.Thread( target=self.task_thread_func, args=(task, monitor_id, package_fileurl, remote_task_root, run_filename) )
+      t = threading.Thread( target=self.task_thread_func, args=(i, task, result_list, monitor_id, package_fileurl, remote_task_root, run_filename) )
       thread_list.append(t)
       t.start()
 
@@ -543,6 +594,8 @@ class TaskRunner():
       print json.dumps(self.task_info)
 
   def push_thread_func(self, i, task, result_list):
+    self.thread_limiter.acquire()
+
     monitor_id = task['monitorId']
     package_filepath = self.monitor_task[monitor_id]['packageInfo'][0]
     remote_task_root = self.__real_paths__(';', monitor_id)[1]
@@ -589,22 +642,18 @@ class TaskRunner():
 
       break
 
-    result_list[i] = True
+    result_list[i] = 1
 
-  def push_packages(self, monitor_tasks, MAX_CONCURRENCY=20):
-    thread_list = []; result_list = []
+    sys.stderr.write(''.join(map(lambda x: str(x), result_list))+': %s \n' % (monitor_id))
+
+    self.thread_limiter.release()
+
+  def push_packages(self, monitor_tasks):
+    thread_list = []; result_list = [ 0 for t in monitor_tasks ]
     for i,task in enumerate(monitor_tasks):
       t = threading.Thread( target=self.push_thread_func, args=(i,task,result_list,) )
-      thread_list.append(t); result_list.append(False)
-
-    cur = 0
-    while True:
-      if cur >= len(thread_list):
-        break
-      if len(filter(lambda t: t.isAlive(), thread_list)) < MAX_CONCURRENCY:
-        sys.stderr.write(''.join(map(lambda x: str(x), map(lambda (i, t): 1 if t.isAlive() else (2 if i<cur else 0), enumerate(thread_list))))+'\n')
-        thread_list[cur].start()
-        cur += 1
+      thread_list.append(t)
+      t.start()
 
     [ t.join() for t in thread_list ]
     return filter(lambda (i,x): result_list[i], enumerate(monitor_tasks))
@@ -631,11 +680,14 @@ if __name__ == "__main__":
     exit()
 
   conf_filepath = sys.argv[1]
-  # task info
-  task_config_parser = TaskConfigParser(conf_filepath, 'info.schema')
-  task_info = task_config_parser.generate_task_info()
+
   # monitor info
   monitor_info = json.load( open('secrets.json') )['nodes']
+
+  # task info
+  task_config_parser = TaskConfigParser(conf_filepath, 'info.schema', monitor_info)
+  task_info = task_config_parser.generate_task_info()
+
   # run task
   task_runner = TaskRunner(task_info, monitor_info)
   task_runner.run()
