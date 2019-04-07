@@ -171,8 +171,13 @@ class TaskConfigParser():
         t.inputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.ip_list'), self.task_id+'.ip_list' ) ]
       else:
         t.inputs = [ "%s;%s" % ( self.task_id+'.ip_list', self.task_id+'.ip_list' ) ]
-      t.outputs = [ "%s;%s" % ( os.path.join(monitor, self.task_id+'.warts'), self.task_id+'.warts' ) ]
-      t.command = "scamper -c 'trace -P %s' -p %d -O warts -o ${OUTPUTS[0]} -f ${INPUTS[0]}" % (method, pps)
+      t.outputs = [ "%s;%s" % ( os.path.join(monitor, ""), self.task_id+'.*.warts' ) ]
+      t.command  = "split -l 200000 -d ${INPUTS[0]} ${INPUTS[0]}. ;\n"
+      t.command += "p=$(echo ${OUTPUTS[0]} | sed 's/\.[^.]*\.warts$//'); \n"
+      t.command += "for INPUT in $(ls ${INPUTS[0]}.*); do \n"
+      t.command += "  n=$(echo $INPUT | grep -oP '\.\K(\d+)$'); \n"
+      t.command += "  scamper -c 'trace -P %s' -p %d -O warts -o $p.$n.warts -f $INPUT; \n" % (method, pps)
+      t.command += "done"
       s2.tasks.append(t)
 
     task_graph.steps.append(s2)
@@ -181,7 +186,7 @@ class TaskConfigParser():
     s3 = Step(name="warts2iface", tasks=[])
 
     t = Task()
-    t.inputs = [ os.path.join("*", self.task_id+'.warts') ]
+    t.inputs = [ os.path.join("*", self.task_id+'.*.warts') ]
     t.outputs = [ self.task_id+'.ifaces', self.task_id+'.links' ]
     t.command = './analyze warts2iface "${INPUTS[0]}" ${OUTPUTS[0]}'
     s3.tasks.append(t)
@@ -458,12 +463,32 @@ class TaskRunner():
     self.taskid_to_monitor[r.task_id] = monitor_id;
     #r.get( callback=self.on_run_message, propagate=False )
     start_time = time.time()
+    skip = False
+
     while True:
+      if r.state == "STARTED":
+        sys.stderr.write( "%s STARTED\n" % (monitor_id) )
+        break
+      if time.time() - start_time > 3*60:
+        sys.stderr.write( "%s START error\n" % (monitor_id) )
+        skip = True
+        break
+      time.sleep(random.randint(5,10))
+
+    while not skip and True:
       lock = threading.Lock()
       lock.acquire()
-      if r.ready():
+      try:
+        ready = r.ready()
+      except:
+        sys.stderr.write( "%s MySQL error\n" % (monitor_id) )
+        lock.release()
+        time.sleep(random.randint(30,60))
+        continue
+      if ready:
         result_list[i] = 1
         sys.stderr.write( ''.join(map(lambda x: str(x), result_list)) + ": %s ready\n" % (monitor_id) )
+        lock.release()
         break
       sys.stderr.write( ''.join(map(lambda x: str(x), result_list)) + ": %s NOT ready\n" % (monitor_id) )
       lock.release()
@@ -474,7 +499,8 @@ class TaskRunner():
 
       time.sleep(60)
 
-    self.on_run_message(r.task_id)
+    if not skip:
+      self.on_run_message(r.task_id)
 
     lock = threading.Lock()
     lock.acquire()
@@ -568,7 +594,7 @@ class TaskRunner():
     ## case 1. manager push
     if self.is_manager_push:
       ## push packages
-      self.push_packages(monitor_tasks)
+      monitor_tasks = self.push_packages(monitor_tasks)
       ## run tasks
       self.run_tasks(monitor_tasks)
 
@@ -656,7 +682,7 @@ class TaskRunner():
       t.start()
 
     [ t.join() for t in thread_list ]
-    return filter(lambda (i,x): result_list[i], enumerate(monitor_tasks))
+    return reduce(lambda a, b: a + ([] if not result_list[b[0]] else [b[1]]), enumerate(monitor_tasks), [])
 
   def run(self):
     ## make task root directory

@@ -27,6 +27,8 @@ app = Celery(
   broker = "redis://%s:%s@%s:%s" % (username, password, broker_ip, port)
 )
 
+app.conf.update(task_track_started=True)
+
 @app.task
 def run(package_fileurl, remote_task_root, run_filename):
   print vars(run.request)

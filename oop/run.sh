@@ -325,13 +325,6 @@ usage(){
   echo "      mkdirs -r <\$remote_dir>"
   echo "      get/put -l <\$local> -r <\$remote>"
   echo "      sync -l <\$local> -r <\$remote>"
-  echo ""
-  echo "  probe -n <\$node_name> -i <\$input> -o <\$output>"
-  echo "    I/O TYPES:"
-  echo "      # local & remote result file share the same name <\$result_file>"
-  echo "      -i <\$target_file> -o <\$result_file>"
-  echo "      -i - -o -"
-  echo "      -i - -o <\$result_file>"
   exit
 }
 
@@ -558,7 +551,7 @@ fi
 # celery, sql
 apt-get install -y python-pip rabbitmq-server redis-server python-dev libmysqlclient-dev
 pip install setuptools
-pip install redis
+pip install -U redis
 pip install -U celery "celery[redis]"
 pip install mysqlclient pika sqlalchemy
 
@@ -573,13 +566,13 @@ tmux new -s 'task' -d \; \
 EOF
         ;;
       "stop")
-        cat << "EOF" | sed "s|<\$dir>|$dir|" | sed "s/<\$node_name>/$node_name/"
+        cat << "EOF"
 tmux kill-window -t task
 EOF
         ;;
       "test")
-        cat << "EOF"
-which scamper
+        cat << "EOF" | sed "s|<\$dir>|$dir|"
+df -hl <$dir> --output=pcent | tail -n 1
 EOF
         ;;
     esac \
@@ -622,7 +615,7 @@ EOF
         if [ -z "$(echo $pass | grep "KeyPair")" ]; then
         expect -c " \
           set timeout 20
-          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" --rsync-path \"sudo rsync\" $from $to
+          spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $from $to
           expect {
             timeout {exit 138}
             -re \".*password.*\"
@@ -634,7 +627,7 @@ EOF
           exit \$value
           "
         else
-          rsync -avt --rsync-path="sudo rsync" --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
+          rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
         fi
         ;;
       "put" | "get")
@@ -713,7 +706,7 @@ EOF
         if [ -z "$(echo $pass | grep "KeyPair")" ]; then
           expect -c " \
             set timeout -1
-            spawn rsync -avt --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+            spawn rsync -avt --copy-links --timeout=60 --partial --progress --remove-source-files $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
             log_user 1
             expect -re \".*password.*\" {send -- \"$pass\r\"}
             expect eof
@@ -721,7 +714,7 @@ EOF
             exit \$value
           "
         else
-           rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL #2>/dev/null
+           rsync -avt --copy-links --timeout=60 --partial --progress --remove-source-files $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL #2>/dev/null
         fi
         ;;
       "clean")
@@ -738,18 +731,19 @@ EOF
           ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo rm $REMOTE"
         fi
         ;;
+      "df")
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout -1
+            spawn bash -c \"ssh $ssh -p $port 'df -hl $dir --output=pcent | tail -n 1'\"
+            expect -re \".*password.*\" {send -- \"$pass\r\"}
+            expect eof
+          "
+        else
+          ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "df -hl $dir --output=pcent | tail -n 1"
+        fi
+        ;;
     esac
-    ;;
-
-  "probe")
-    test ! -z "$INPUT" && test ! -z "$OUTPUT" || usage
-    test -z "$NODE" && usage
-    node_name="$NODE"
-
-    python auto.py $CONFIG
-    test "$INPUT" == "-" && \
-      python probe.py lg -n $node_name || \
-      python probe.py probe -n $node_name -f $INPUT
     ;;
   "*")
     usage

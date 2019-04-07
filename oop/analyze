@@ -5,7 +5,7 @@ warts2link(){
 test $# -lt 1 && echo 'warts2link $prefix.warts[.tar.gz;.gz]' && exit
 
 input_file_path=$1
-prefix=$(echo $input_file_path | sed 's/\.gz$//' | sed 's/\.tar$//' | sed 's/\.warts$//')
+prefix=$(echo $input_file_path | sed 's/\.gz$//' | sed 's/\.tar$//' | sed 's/\.warts.*$//')
 
 (test ! -z "$(echo $input_file_path | grep -E '\.tar\.gz$')" && tar zxf $input_file_path -O \
   || test ! -z "$(echo $input_file_path | grep -E '\.gz$')" && gzip -cd $input_file_path \
@@ -49,7 +49,7 @@ input=$1
 output=$2
 prefix=$(echo $output | sed 's/\.ifaces$//')
 for l in ${input[*]}; do
-  pfx=$(echo $l | sed 's/\.warts$//')
+  pfx=$(echo $l | sed 's/\.warts.*$//')
   warts2link $l
   test $(cat $pfx.links | sed '/^$/d' | wc -l) -gt 0 && echo $pfx.links
 done | perl linkmerge.pl >$prefix.links
