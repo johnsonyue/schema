@@ -376,8 +376,8 @@ class Syncer():
   def sync(fh, sc):
     ft, st = fh.tree, sc.tree
     # compare, then sync missing to the file system
+    rl = []
     for path in FTree.diff(ft.root, st.root):
       r = st.ls(path)
-      rl = []
       Syncer._sync_( r, path, ft.root['properties']['path'], rl )
     return rl
