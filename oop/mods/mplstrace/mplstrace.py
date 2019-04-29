@@ -47,7 +47,7 @@ def generate_task_info(parent):
       t.inputs = [ "%s;%s" % ( parent.task_id+'.ip_list', parent.task_id+'.ip_list' ) ]
     t.outputs = [ "%s;%s" % ( os.path.join(monitor, parent.task_id+'.warts'), parent.task_id+'.warts' ) ]
     t.command = "port=$(ps -ef | grep 'scamper -D' | grep -v 'grep' | awk '{for(i=1;i<=NF;i++){ if($i==\"-P\"){print $(i+1)} }}' | head -n 1);\n"
-    t.command += "test -z \"$port\" && port=$(ss -tln | awk 'NR > 1{gsub(/.*:/,"",$4); print $4}' | sort -un | awk -v n=1080 '$0 < n {next}; $0 == n {n++; next}; {exit}; END {print n}') && scamper -D -P $port -p 150;\n"
+    t.command += "test -z \"$port\" && port=$(ss -tln | awk 'NR > 1{gsub(/.*:/,\"\",$4); print $4}' | sort -un | awk -v n=1080 '$0 < n {next}; $0 == n {n++; next}; {exit}; END {print n}') && scamper -D -P $port -p 150;\n"
     t.command += "sc_tnt -m %s -o ${OUTPUTS[0]} -a ${INPUTS[0]} -p $port" % (method)
     s2.tasks.append(t)
 
