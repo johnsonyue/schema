@@ -4,11 +4,13 @@ import socket
 import subprocess
 import threading
 import json
+import argparse
 import datetime
 import pytz
 import time
 import sys
 import os
+import re
 
 from celery import Celery
 import pika
@@ -313,23 +315,27 @@ class TaskConfigParser():
     return json.loads(task_graph.serialize())
 
 class TaskRunner():
-  def __init__(self, task_info, monitor_info):
+  def __init__(self, task_info, monitor_info, conf_filepath, mode):
     # keep a copy of task_info for logging
     self.task_info = task_info
 
     # task info
     self.task_id = self.task_info['id']
     self.steps = self.task_info["steps"]
+    # work mode: 'probe', 'import' or 'both'
+    self.conf_filepath = conf_filepath
+    self.mode = mode
 
     # monitor info
     self.monitor_db = { e['name']: e for e in monitor_info }
     manager_info = self.monitor_db['Manager']
     self.manager_root = manager_info['directory']
+    self.sync_root = manager_info['sync_dir']
     self.manager_ip = manager_info['IP_addr']
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
     self.is_manager_push = True
 
-    self.auto_sync_interval = 60*60*2
+    self.auto_sync_interval = 60*1
     self.thread_limiter = threading.Semaphore(10)
 
     # celery
@@ -414,7 +420,6 @@ class TaskRunner():
     return package_filepath, run_filename
 
   def on_run_message(self, taskid, retry=True):
-    self.thread_limiter.acquire()
     monitor_id = self.taskid_to_monitor[taskid]
     monitor_root = self.monitor_root[monitor_id]
     monitor_task = self.monitor_task[monitor_id]
@@ -432,10 +437,9 @@ class TaskRunner():
         h = subprocess.Popen(get, shell=True)
         h.wait()
         sys.stderr.write("return code: %d, sync: %s\n" % (h.returncode, get))
-        if not retry or not h.returncode or h.returncode == 23 or h.returncode == 138:
+        if not retry or not h.returncode or h.returncode == 23 or h.returncode == 138 or h.returncode == 255:
           break
 
-    self.thread_limiter.release()
     return
 
   def touch_celery_worker(self, monitor_id):
@@ -466,9 +470,15 @@ class TaskRunner():
     skip = False
 
     while True:
-      if r.state == "STARTED":
-        sys.stderr.write( "%s STARTED\n" % (monitor_id) )
-        break
+      try:
+        if r.state == "STARTED":
+          sys.stderr.write( "%s STARTED\n" % (monitor_id) )
+          break
+      except:
+        sys.stderr.write( "%s MySQL error\n" % (monitor_id) )
+        lock.release()
+        time.sleep(random.randint(10,30))
+        continue
       if time.time() - start_time > 3*60:
         sys.stderr.write( "%s START error\n" % (monitor_id) )
         skip = True
@@ -552,6 +562,49 @@ class TaskRunner():
             subprocess.Popen( "curl -s -o %s %s" % (realpath, url), shell=True).communicate()
           task['inputs'][i] = ';'.join( inputs )
 
+    # case 0. probe/import
+    if self.mode != 'both' and step['name'] == 'import':
+
+      task_sync_root = os.path.join( self.sync_root, self.task_id )
+      if not os.path.exists(task_sync_root):
+        os.makedirs(task_sync_root)
+
+      if self.mode == 'probe':
+        inputs = map( lambda x: self.__real_paths__(x)[0], task['inputs'] )
+        outputs = []
+        command = ""
+
+        # sync result files
+        for i in range(len(inputs)):
+          command += "cp ${INPUTS[%d]} %s/$(ls -l ${INPUTS[%d]} | awk '{print $5}')-$(basename ${INPUTS[%d]});\n" \
+            % (i, task_sync_root, i, i)
+
+        # sync log file
+        step['endTime'] = current_time()
+        log_filepath = os.path.join( task_sync_root, self.task_id+'.log' )
+        json.dump(self.task_info, open(log_filepath, 'wb'))
+        command += "f=%s; mv $f $(dirname $f)/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
+          % (log_filepath)
+
+        # sync config file
+        command += "cp %s %s/$(ls -l %s | awk '{print $5}')-$(basename %s);\n" \
+          % (self.conf_filepath, task_sync_root, self.conf_filepath, self.conf_filepath)
+
+        command = self.__eval_command__( inputs, outputs, command )
+      else:
+        _inputs = os.listdir(task_sync_root)
+
+        inputs = map( lambda x: filter(lambda y: re.match('\d+-'+x, y), _inputs)[0], task['inputs']) # find corresponding file in the sync dir
+        inputs = map( lambda x: os.path.join(task_sync_root, x), inputs) # no need to use __real_path__ here.
+        outputs = map( lambda x: self.__real_paths__(x)[0], task['outputs'] )
+        command = self.__eval_command__( inputs, outputs, task['command'] )
+
+      sys.stderr.write(command+'\n')
+      subprocess.Popen(command, shell=True).communicate()
+
+      step['endTime'] = current_time()
+      print json.dumps(self.task_info)
+      return
     # case 1. local task
     if not tasks[0].has_key('monitorId'):
       for task in tasks:
@@ -637,7 +690,7 @@ class TaskRunner():
       sys.stderr.write("return code: %d, mkdirs: %s\n" % (h.returncode, mkdirs))
       lock.release()
 
-      if h.returncode == 138:
+      if h.returncode == 138 or h.returncode == 255:
         result_list[i] = False
         return
       elif h.returncode:
@@ -658,7 +711,7 @@ class TaskRunner():
       sys.stderr.write("return code: %d, put: %s\n" % (h.returncode, put))
       lock.release()
 
-      if h.returncode == 138:
+      if h.returncode == 138 or h.returncode == 255:
         result_list[i] = False
         return
       elif h.returncode:
@@ -701,11 +754,25 @@ class TaskRunner():
     print json.dumps(self.task_info)
 
 if __name__ == "__main__":
-  if len(sys.argv) < 2:
-    usage()
-    exit()
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+    "conf_filepath", 
+    type=str,
+    help="config filepath"
+  )
+  parser.add_argument(
+    '-m', '--mode',
+    nargs='?',
+    const='both',
+    default='both',
+    type=str,
+    choices=['both', 'probe', 'import'],
+    help='both/probe/import (default: both)'
+  )
+  args = parser.parse_args()
 
-  conf_filepath = sys.argv[1]
+  mode = args.mode
+  conf_filepath = args.conf_filepath
 
   # monitor info
   monitor_info = json.load( open('secrets.json') )['nodes']
@@ -715,5 +782,5 @@ if __name__ == "__main__":
   task_info = task_config_parser.generate_task_info()
 
   # run task
-  task_runner = TaskRunner(task_info, monitor_info)
+  task_runner = TaskRunner(task_info, monitor_info, conf_filepath, mode)
   task_runner.run()
