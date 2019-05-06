@@ -167,6 +167,7 @@ class TaskConfigParser():
       attemps = traceroute_method["attemps"]
       firstHop = traceroute_method["firstHop"]
       pps = traceroute_method["pps"]
+      gap = traceroute_method["gap"] if "gap" in traceroute_method else 5
 
       t = Task(monitorId=monitor)
       if scheduling_strategy in [ "split", "spread", "offset" ]:
@@ -178,7 +179,7 @@ class TaskConfigParser():
       t.command += "p=$(echo ${OUTPUTS[0]} | sed 's/\.[^.]*\.warts$//'); \n"
       t.command += "for INPUT in $(ls ${INPUTS[0]}.*); do \n"
       t.command += "  n=$(echo $INPUT | grep -oP '\.\K(\d+)$'); \n"
-      t.command += "  scamper -c 'trace -P %s' -p %d -O warts -o $p.$n.warts -f $INPUT; \n" % (method, pps)
+      t.command += "  scamper -c 'trace -P %s -f %d -g %d' -p %d -O warts -o $p.$n.warts -f $INPUT; \n" % (method, firstHop, gap, pps)
       t.command += "done"
       s2.tasks.append(t)
 
@@ -195,9 +196,7 @@ class TaskConfigParser():
 
     task_graph.steps.append(s3)
 
-    do_dealias = self.conf["doDealias"]["detail"] if self.conf.has_key('doDealias') else True
-    if not do_dealias:
-      return json.loads(task_graph.serialize())
+    do_dealias = self.conf["doDealias"]["detail"] if self.conf.has_key('doDealias') else False
 
     # traceroute step 4
     s4 = Step(name="iffinder", tasks=[])
@@ -208,7 +207,8 @@ class TaskConfigParser():
       t.command = "iffinder -c 100 -r %d -o $(echo ${OUTPUTS[0]} | sed 's/\.iffout//') ${INPUTS[0]}" % (pps)
       s4.tasks.append(t)
 
-    task_graph.steps.append(s4)
+    if do_dealias:
+      task_graph.steps.append(s4)
 
     # traceroute step 5
 
@@ -220,7 +220,8 @@ class TaskConfigParser():
     t.command = "cat ${INPUTS[0]} | grep -v '#' | awk '{ if($NF == \"D\") print $1\" \"$2}' | sort -u >${OUTPUTS[0]}"
     s5.tasks.append(t)
 
-    task_graph.steps.append(s5)
+    if do_dealias:
+      task_graph.steps.append(s5)
 
     # traceroute step 6
 
@@ -330,8 +331,10 @@ class TaskRunner():
     self.monitor_db = { e['name']: e for e in monitor_info }
     manager_info = self.monitor_db['Manager']
     self.manager_root = manager_info['directory']
-    self.sync_root = manager_info['sync_dir']
     self.manager_ip = manager_info['IP_addr']
+    # sync info
+    sync_info = self.monitor_db['Sync']
+    self.sync_root = sync_info['directory']
     #self.is_manager_push = manager_info['isManagerPush'] if manager_info.has_key('isManagerPush') else True
     self.is_manager_push = True
 
@@ -566,34 +569,40 @@ class TaskRunner():
     if self.mode != 'both' and step['name'] == 'import':
 
       task_sync_root = os.path.join( self.sync_root, self.task_id )
-      if not os.path.exists(task_sync_root):
-        os.makedirs(task_sync_root)
 
       if self.mode == 'probe':
         inputs = map( lambda x: self.__real_paths__(x)[0], task['inputs'] )
         outputs = []
         command = ""
 
+        # make directory if not exists: <$task_sync_root>
+        command += "./run.sh -n Sync ssh mkdirs -r %s;\n" \
+          % (task_sync_root)
         # sync result files
         for i in range(len(inputs)):
-          command += "cp ${INPUTS[%d]} %s/$(ls -l ${INPUTS[%d]} | awk '{print $5}')-$(basename ${INPUTS[%d]});\n" \
-            % (i, task_sync_root, i, i)
+          # command += "cp ${INPUTS[%d]} %s/$(ls -l ${INPUTS[%d]} | awk '{print $5}')-$(basename ${INPUTS[%d]});\n" \
+          command += "f=${INPUTS[%d]}; ./run.sh -n Sync ssh push -l $f -r %s/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
+            % (i, task_sync_root)
 
         # sync log file
         step['endTime'] = current_time()
         log_filepath = os.path.join( task_sync_root, self.task_id+'.log' )
         json.dump(self.task_info, open(log_filepath, 'wb'))
-        command += "f=%s; mv $f $(dirname $f)/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
+        # command += "f=%s; mv $f $(dirname $f)/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
+        command += "f=%s; ./run.sh -n Sync ssh mv -i $f -o $(dirname $f)/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
           % (log_filepath)
 
         # sync config file
-        command += "cp %s %s/$(ls -l %s | awk '{print $5}')-$(basename %s);\n" \
-          % (self.conf_filepath, task_sync_root, self.conf_filepath, self.conf_filepath)
+        # command += "cp %s %s/$(ls -l %s | awk '{print $5}')-$(basename %s);\n" \
+        command += "f=%s; ./run.sh -n Sync ssh push -l $f -r %s/$(ls -l $f | awk '{print $5}')-$(basename $f);\n" \
+          % (self.conf_filepath, task_sync_root)
 
         command = self.__eval_command__( inputs, outputs, command )
       else:
         _inputs = os.listdir(task_sync_root)
 
+        print task['inputs']
+        print _inputs
         inputs = map( lambda x: filter(lambda y: re.match('\d+-'+x, y), _inputs)[0], task['inputs']) # find corresponding file in the sync dir
         inputs = map( lambda x: os.path.join(task_sync_root, x), inputs) # no need to use __real_path__ here.
         outputs = map( lambda x: self.__real_paths__(x)[0], task['outputs'] )
@@ -747,7 +756,9 @@ class TaskRunner():
     print json.dumps(self.task_info)
 
     ## run task steps
-    for step in self.steps:
+    steps = self.steps if self.mode != 'import' else \
+      filter(lambda x: x['name'] == 'import', self.steps)
+    for step in steps:
       self.run_step(step)
 
     self.task_info['endTime'] = current_time()
