@@ -627,7 +627,7 @@ EOF
           exit \$value
           "
         else
-          rsync -avt --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
+          rsync -avt --rsync-path="sudo rsync" --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $from $to
         fi
         ;;
       "put" | "get")
@@ -706,7 +706,7 @@ EOF
         if [ -z "$(echo $pass | grep "KeyPair")" ]; then
           expect -c " \
             set timeout -1
-            spawn rsync -avt --copy-links --timeout=60 --partial --progress --remove-source-files $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
+            spawn rsync -avt --remove-source-files --copy-links --timeout=60 --partial --progress $options -e \"ssh -p $port\" $ssh:$REMOTE $LOCAL
             log_user 1
             expect -re \".*password.*\" {send -- \"$pass\r\"}
             expect eof
@@ -714,7 +714,7 @@ EOF
             exit \$value
           "
         else
-           rsync -avt --copy-links --timeout=60 --partial --progress --remove-source-files $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL #2>/dev/null
+           rsync --rsync-path="sudo rsync" -avt --remove-source-files --copy-links --timeout=60 --partial --progress $options -e "ssh -p $port -i $priv_key" $ssh:$REMOTE $LOCAL #2>/dev/null
         fi
         ;;
       "clean")
