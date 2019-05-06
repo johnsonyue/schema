@@ -743,6 +743,19 @@ EOF
           ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "df -hl $dir --output=pcent | tail -n 1"
         fi
         ;;
+      "mv")
+        test ! -z "$INPUT" && test ! -z "$OUTPUT" || usage
+        if [ -z "$(echo $pass | grep "KeyPair")" ]; then
+          expect -c " \
+            set timeout -1
+            spawn bash -c \"ssh $ssh -p $port 'mv $INPUT $OUTPUT'\"
+            expect -re \".*password.*\" {send -- \"$pass\r\"}
+            expect eof
+          "
+        else
+          ssh -o 'StrictHostKeyChecking no' $ssh -p $port -i $priv_key "sudo $INPUT $OUTPUT"
+        fi
+        ;;
     esac
     ;;
   "*")
