@@ -432,9 +432,9 @@ debconf-set-selections <<< 'mysql-server mysql-server/root_password_again passwo
 apt-get install -y mysql-server
 apt-get install -y python-pip rabbitmq-server redis-server
 pip install -U celery "celery[redis]"
-pip install redis pika sqlalchemy
+pip install -U redis pika sqlalchemy
 pip install python_jsonschema_objects
-pip install ciscoconfparse netaddr
+pip install ciscoconfparse netaddr IPy
 
 # scamper
 cd <$dir>
